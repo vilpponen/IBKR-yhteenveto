@@ -166,6 +166,8 @@ Virheilmoitukset ja parannusehdotukset:
 sähköpostiin. Kuvaile ongelma yleisellä tasolla tai muuta luvut keksityiksi.
 Tietoturvaongelmat ilmoitetaan yksityisesti: katso [SECURITY.md](SECURITY.md).
 
+Mitä on muuttunut: [CHANGELOG.md](CHANGELOG.md).
+
 ## Kehitys
 
 ```bash
