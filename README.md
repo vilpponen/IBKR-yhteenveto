@@ -14,7 +14,60 @@ minnekään, eikä sivu lataa mitään internetistä.
 
 ## Käyttöönotto
 
-Vaatii Python 3.10+ (macOS:ssa `python3`).
+### 1. Asenna Python 3.10 tai uudempi
+
+* **macOS:** asenna python.org:sta (https://www.python.org/downloads/) tai `brew install python`.
+  Tarkista Päätteessä (Terminal): `python3 --version`. macOS:n mukana tuleva `python3` (Xcode Command Line Tools) on
+  usein 3.9 — se on liian vanha.
+* **Windows:** asenna python.org:sta ja ruksi asennuksessa **"Add python.exe to PATH"**.
+  Tarkista PowerShellissä: `py --version`.
+
+### 2. Lataa ja käynnistä (ilman GitHub-tunnusta tai gitiä)
+
+**macOS** — avaa Pääte (Terminal). Luo sovellukselle oma kansio, siirry siihen ja aja asennus
+(esimerkissä `Documents/IBKR-yhteenveto`; kansion paikan ja nimen voi valita vapaasti):
+
+```bash
+mkdir -p ~/Documents/IBKR-yhteenveto
+cd ~/Documents/IBKR-yhteenveto
+curl -fsSL https://raw.githubusercontent.com/vilpponen/IBKR-yhteenveto/main/install.sh | bash
+```
+
+Komento lataa sovelluksen tähän kansioon, asentaa riippuvuudet sen sisään (`.venv`) ja avaa selaimen. Mitään ei
+asennu kansion ulkopuolelle. Skriptin voi lukea ennen ajoa: [install.sh](install.sh).
+
+**Seuraavilla kerroilla** sama kansio + sama komento — se päivittää uusimpaan versioon ja käynnistää:
+
+```bash
+cd ~/Documents/IBKR-yhteenveto
+curl -fsSL https://raw.githubusercontent.com/vilpponen/IBKR-yhteenveto/main/install.sh | bash
+```
+
+(Ilman päivitystä: `cd ~/Documents/IBKR-yhteenveto && bash run.sh`.) Poisto: poista kansio.
+Jos komennon ajaa kansiossa, jossa on jo muita tiedostoja (esim. kotikansio), sovellus asennetaan sen alikansioon
+`IBKR-yhteenveto`.
+
+**Windows 10/11** (PowerShell — `curl.exe` ja `tar` kuuluvat Windowsiin):
+
+```powershell
+cd $HOME\Downloads
+curl.exe -L -o IBKR-yhteenveto.zip https://github.com/vilpponen/IBKR-yhteenveto/archive/refs/heads/main.zip
+tar -xf IBKR-yhteenveto.zip
+cd IBKR-yhteenveto-main
+py -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python server.py
+```
+
+Selain aukeaa osoitteeseen http://127.0.0.1:8501. Lopetus: **Ctrl+C** pääteikkunassa.
+
+Latauksen voi tehdä myös selaimella: GitHub-sivulla **Code → Download ZIP**, pura zip kaksoisklikkaamalla ja aja
+kansiossa `bash run.sh` (macOS) tai yllä olevat `py -m venv` -rivit (Windows).
+
+Windows, seuraavat kerrat: `cd $HOME\Downloads\IBKR-yhteenveto-main; .venv\Scripts\python server.py`.
+Päivitys: poista kansio ja lataa uudelleen. Mitään ei asennu järjestelmään (riippuvuudet ovat kansion `.venv`:ssä).
+
+### Gitin käyttäjille
 
 ```bash
 git clone https://github.com/vilpponen/IBKR-yhteenveto.git
@@ -22,9 +75,9 @@ cd IBKR-yhteenveto
 ./run.sh          # luo .venv:n, asentaa pdfplumber + openpyxl, avaa http://127.0.0.1:8501
 ```
 
-Windows: `python -m venv .venv && .venv\Scripts\pip install -r requirements.txt && .venv\Scripts\python server.py`
+Päivitys: `git pull`.
 
-Komentorivi ilman selainta:
+### Komentorivi ilman selainta
 
 ```bash
 .venv/bin/python -m ibkr_yhteenveto raportti.csv raportti.pdf -o tulos.xlsx
