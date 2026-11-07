@@ -17,7 +17,7 @@ minnekään, eikä sivu lataa mitään internetistä.
 Vaatii Python 3.10+ (macOS:ssa `python3`).
 
 ```bash
-git clone https://github.com/<käyttäjä>/IBKR-yhteenveto.git
+git clone https://github.com/vilpponen/IBKR-yhteenveto.git
 cd IBKR-yhteenveto
 ./run.sh          # luo .venv:n, asentaa pdfplumber + openpyxl, avaa http://127.0.0.1:8501
 ```
