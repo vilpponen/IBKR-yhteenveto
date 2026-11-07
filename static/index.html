@@ -83,7 +83,7 @@
 <div class="wrap">
   <header>
     <h1>IBKR-yhteenveto</h1>
-    <p>Interactive Brokersin vuosiraportit Suomen verotukseen. Kaikki lasketaan tällä koneella — mitään ei lähetetä minnekään.</p>
+    <p>Interactive Brokersin vuosiraportit Suomen verotukseen. <span id="privacy">Kaikki lasketaan tällä koneella — mitään ei lähetetä minnekään.</span></p>
   </header>
   <nav class="stepper"><span id="s1" class="on"><b>1</b>Raportit &amp; asetukset</span><span id="s2"><b>2</b>Tulokset</span></nav>
 
@@ -172,13 +172,14 @@
 
 <script>
 const $ = s => document.querySelector(s);
-const sid = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)).replace(/-/g, "");
 const _e2 = new Intl.NumberFormat("fi-FI", {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const _e0 = new Intl.NumberFormat("fi-FI", {maximumFractionDigits: 0});
 const eur = {format: v => _e2.format(Math.abs(v) < 0.005 ? 0 : v)};
 const eur0 = {format: v => _e0.format(Math.abs(v) < 0.5 ? 0 : v)};
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let files = [], recog = null, result = null;
+// Everything stays in this page: the files, the parsed statement and the workbook. The server keeps nothing
+// between requests; reloading the page discards it all.
+let files = [], recog = null, stmt = null, result = null;
 
 // ---------- persist settings (convenience only; never statement data)
 const FIELDS = ["name","share_cat","ftt","wd_open","ug_open","cf","etfs","loss_cf"];
@@ -201,7 +202,7 @@ document.querySelectorAll("input,select").forEach(el => el.addEventListener("cha
 
 // ---------- API
 async function api(path, body){
-  const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({sid, ...body})});
+  const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
   const j = await r.json(); if(!r.ok || j.error) throw new Error(j.error || r.statusText); return j;
 }
 function busy(on, text){ $("#ovtext").textContent = text || "Luetaan raportteja… (PDF voi kestää 30–60 s)"; $("#overlay").classList.toggle("on", on); }
@@ -216,28 +217,34 @@ drop.addEventListener("keydown", e => { if(e.key==="Enter"||e.key===" ") input.c
 drop.addEventListener("drop", e => addFiles([...e.dataTransfer.files]));
 input.addEventListener("change", () => { const l = [...input.files]; input.value = ""; addFiles(l); });
 
+async function toBase64(file){
+  const b = new Uint8Array(await file.arrayBuffer()); let out = "";
+  for(let i = 0; i < b.length; i += 0x8000) out += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  return btoa(out);
+}
 async function addFiles(list){
-  showErr(""); busy(true, "Ladataan tiedostoja…");
-  try{
-    for(const f of list){
-      if(!/\.(pdf|csv)$/i.test(f.name)){ showErr(`${f.name}: vain IBKR:n PDF- tai CSV-raportit`); continue; }
-      const r = await fetch("/api/upload", {method:"POST", headers:{"X-Session":sid, "X-Filename": encodeURIComponent(f.name)}, body: f});
-      const j = await r.json(); if(j.error) throw new Error(j.error); files = j.files;
-    }
-    renderChips(); await analyze();
-  }catch(e){ showErr(e.message); } finally{ busy(false); }
+  showErr("");
+  for(const f of list){
+    if(!/\.(pdf|csv)$/i.test(f.name)){ showErr(`${f.name}: vain IBKR:n PDF- tai CSV-raportit`); continue; }
+    files = files.filter(x => x.name !== f.name).concat([f]);
+  }
+  renderChips();
+  if(files.length) await analyze().catch(e => showErr(e.message));
 }
 async function removeFile(name){
-  const j = await api("/api/remove", {name}); files = j.files; renderChips();
-  if(files.length) await analyze().catch(e=>showErr(e.message)); else { recog=null; renderRecog(); }
+  files = files.filter(f => f.name !== name); renderChips();
+  if(files.length) await analyze().catch(e=>showErr(e.message)); else { recog = stmt = null; renderRecog(); }
 }
 function renderChips(){
-  $("#chips").innerHTML = files.map(n => `<span class="chip">${esc(n)}<button title="Poista" data-n="${esc(n)}">×</button></span>`).join("");
+  $("#chips").innerHTML = files.map(f => `<span class="chip">${esc(f.name)}<button title="Poista" data-n="${esc(f.name)}">×</button></span>`).join("");
   $("#chips").querySelectorAll("button").forEach(b => b.onclick = () => removeFile(b.dataset.n));
-  $("#go").disabled = !files.length;
+  $("#go").disabled = !files.length || !stmt;
 }
 async function analyze(){
-  busy(true); try{ const prev = recog; recog = await api("/api/analyze", {});
+  busy(true); stmt = null; renderChips();
+  try{ const prev = recog;
+    const j = await api("/api/analyze", {files: await Promise.all(files.map(async f => ({name: f.name, data: await toBase64(f)})))});
+    recog = j.recognised; stmt = j.statement; renderChips();
     if(!$("#name").value || (prev && prev.account !== recog.account && $("#name").value === prev.name)) $("#name").value = recog.name || "";
     renderRecog(); }
   finally{ busy(false); }
@@ -278,11 +285,17 @@ function settings(){
 }
 $("#go").onclick = async () => {
   showErr(""); busy(true, "Lasketaan…");
-  try{ result = await api("/api/compute", {mode: mode(), settings: settings()}); renderResult(); step(2); }
+  try{ result = await api("/api/compute", {mode: mode(), settings: settings(), statement: stmt}); renderResult(); step(2); }
   catch(e){ showErr(e.message); } finally{ busy(false); }
 };
 $("#back").onclick = () => step(1);
-$("#dl").onclick = () => { location.href = `/api/xlsx?sid=${sid}`; };
+$("#dl").onclick = () => {   // workbook arrived with the result; save it from page memory
+  const bin = atob(result.xlsx), b = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([b], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  const a = Object.assign(document.createElement("a"), {href: url, download: result.filename || "IBKR-yhteenveto.xlsx"});
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+};
 function step(n){
   $("#step1").classList.toggle("hidden", n !== 1); $("#step2").classList.toggle("hidden", n !== 2);
   $("#s1").classList.toggle("on", n === 1); $("#s2").classList.toggle("on", n === 2); window.scrollTo(0, 0);
@@ -318,6 +331,11 @@ function renderResult(){
   $("#notes").innerHTML = r.notes.map(n => `<p class="muted">${esc(n)}</p>`).join("");
 }
 
+// Hosted copy (not 127.0.0.1): say plainly where the files go and that nothing is kept.
+if(!/^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname))
+  $("#privacy").textContent = "Raportit lähetetään palvelimelle vain laskentaa varten ja käsitellään muistissa — " +
+    "palvelimelle ei tallenneta mitään. Tiedostot, tulos ja työkirja pysyvät vain tässä selainikkunassa; " +
+    "sivun sulkeminen tai päivittäminen poistaa ne.";
 loadSettings(); applyMode();
 </script>
 </body>

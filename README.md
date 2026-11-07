@@ -7,6 +7,12 @@ kaavoja ja jokainen erä on jäljitettävissä IBKR:n raporttiin.
 Sovellus toimii **paikallisesti omalla koneellasi** (Pythonin oma web-palvelin, `127.0.0.1`). Raportteja ei lähetetä
 minnekään, eikä sivu lataa mitään internetistä.
 
+**Palvelin ei tallenna mitään.** Ei istuntoja, ei tiedostoja, ei väliaikaistiedostoja levylle: jokainen pyyntö
+käsitellään muistissa ja unohdetaan, kun vastaus on lähetetty. Raportit, jäsennetty raportti ja Excel-työkirja
+pysyvät vain selainikkunassa — sivun päivittäminen tai sulkeminen poistaa ne. Lokiin kirjataan vain pyynnön polku
+(virheistä pelkkä virhetyyppi; tarkemmat tiedot vain `--debug`-tilassa). Tämä pätee myös, jos sovellus ajetaan
+palvelimella muiden käyttöön; silloin sivu kertoo käyttäjälle, että raportit lähetetään palvelimelle laskentaa varten.
+
 > ⚠️ **Ei veroneuvontaa.** Työkalu tekee laskelman ja näyttää perusteet, mutta tulkinnat (esim. omaisuuslaji,
 > lähdeverojen hyvitys) kannattaa vahvistaa kirjanpitäjältä tai Verohallinnosta. Säännöt: verovuodet 2025–2026.
 

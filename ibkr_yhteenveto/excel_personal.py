@@ -1,12 +1,13 @@
 """Excel workbook for a personal (henkilöasiakas) IBKR account — OmaVero figures with live formulas."""
 from __future__ import annotations
 
-import io
 from datetime import date
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment
 from openpyxl.worksheet.datavalidation import DataValidation
+
+from .xlsx_mem import workbook_bytes
 
 from .books import _is_div_wht, _is_pil, wht_country
 from .excel import FILL_KEY, NUM, PCT, Sheet
@@ -253,6 +254,4 @@ def write_personal_workbook(b: PBooks) -> bytes:
 
     for ws in wb.worksheets:
         ws.sheet_view.showGridLines = False
-    bio = io.BytesIO()
-    wb.save(bio)
-    return bio.getvalue()
+    return workbook_bytes(wb)   # in memory: no temp files on disk

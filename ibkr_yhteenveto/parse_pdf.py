@@ -8,6 +8,8 @@ and read left column, then right column.
 """
 from __future__ import annotations
 
+import io
+
 import re
 from pathlib import Path
 
@@ -59,9 +61,14 @@ def _split_sections(lines: list[str]) -> list[tuple[str, list[str]]]:
     return secs
 
 
-def parse_pdf(path: str | Path) -> Statement:
-    st = Statement(source_files=[Path(path).name])
-    with pdfplumber.open(str(path)) as pdf:
+def parse_pdf(path: str | Path | bytes, name: str | None = None) -> Statement:
+    """Parse an IBKR PDF from a path, or from bytes in memory (nothing is written to disk)."""
+    if isinstance(path, (bytes, bytearray)):
+        src, name = io.BytesIO(path), name or "statement.pdf"
+    else:
+        src, name = str(path), name or Path(path).name
+    st = Statement(source_files=[name])
+    with pdfplumber.open(src) as pdf:
         first = pdf.pages[0].extract_text() or ""
         lines = _page_streams(pdf)
     head = first.splitlines()
