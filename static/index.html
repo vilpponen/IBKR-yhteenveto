@@ -77,11 +77,15 @@
     animation:r .8s linear infinite;vertical-align:-3px;margin-right:10px} @keyframes r{to{transform:rotate(360deg)}}
   .hidden{display:none!important}
   footer{margin-top:36px;color:var(--muted);font-size:12px}
+  header a,footer a{color:var(--accent);text-decoration:none} header a:hover,footer a:hover{text-decoration:underline}
+  .repo{float:right;font-size:13px;margin-top:10px}
+  @media (max-width:560px){ .repo{float:none;display:block;margin:0 0 6px} }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
+    <a class="repo" href="https://github.com/vilpponen/IBKR-yhteenveto" target="_blank" rel="noopener">Lähdekoodi GitHubissa ↗</a>
     <h1>IBKR-yhteenveto</h1>
     <p>Interactive Brokersin vuosiraportit Suomen verotukseen. <span id="privacy">Kaikki lasketaan tällä koneella — mitään ei lähetetä minnekään.</span></p>
   </header>
@@ -103,7 +107,7 @@
         <div id="drop" class="drop" tabindex="0">
           <strong>Pudota IBKR-raportit tähän</strong>
           <p>tai klikkaa valitaksesi · PDF ja/tai CSV · saman tilin ja kauden raportit yhdistetään</p>
-          <p>Paras: Activity Statement (CSV) + Realized Summary tai Activity Statement (PDF)</p>
+          <p>Osakeyhtiö: Activity Statement (CSV) riittää · Yksityishenkilö: Activity Statement CSV + PDF (tarkat kauppakurssit)</p>
           <input id="file" type="file" accept=".pdf,.csv" multiple hidden>
         </div>
         <div id="chips" class="chips"></div>
@@ -166,7 +170,7 @@
     <div id="notes"></div>
   </section>
 
-  <footer>IBKR-yhteenveto · avoin lähdekoodi · ei veroneuvontaa — käy luvut läpi kirjanpitäjän kanssa ennen veroilmoitusta.</footer>
+  <footer>IBKR-yhteenveto · <a href="https://github.com/vilpponen/IBKR-yhteenveto" target="_blank" rel="noopener">avoin lähdekoodi (GitHub, MIT)</a> · ei veroneuvontaa — käy luvut läpi kirjanpitäjän kanssa ennen veroilmoitusta.</footer>
 </div>
 <div id="overlay" class="overlay"><div><span class="spin"></span><span id="ovtext">Luetaan raportteja…</span></div></div>
 
