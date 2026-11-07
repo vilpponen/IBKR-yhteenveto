@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IBKR-yhteenveto</title>
+<style>
+  :root{
+    --bg:#F4F1EA; --panel:#FFFFFF; --ink:#1C1A14; --muted:#6B675C; --line:#E2DDD1;
+    --accent:#C0392B; --accent-ink:#FFFFFF; --ok:#5E9475; --ok-bg:#EAF3EC; --warn-bg:#FFF6DD; --warn:#7A5B00;
+    --err-bg:#FBEAE7; --err:#8E2A1F; --chip:#F1EEE6; --focus:#C0392B33;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#15140F; --panel:#1E1C16; --ink:#EDE8DC; --muted:#A39E90; --line:#36332A; --chip:#2A2820;
+      --ok-bg:#1D2A21; --ok:#8CC2A0; --warn-bg:#2E2814; --warn:#E8C766; --err-bg:#341C18; --err:#F2A193; }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans)}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 64px}
+  header h1{font-size:30px;letter-spacing:-.01em;margin:0 0 2px}
+  header p{margin:0;color:var(--muted);font-size:13px}
+  .stepper{display:flex;gap:28px;margin:22px 0 18px;padding-bottom:14px;border-bottom:1px solid var(--line);font-size:14px}
+  .stepper span{color:var(--muted)} .stepper span.on{color:var(--ink);font-weight:700}
+  .stepper b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;margin-right:6px;
+    background:var(--chip);font-size:12px} .stepper .on b{background:var(--ink);color:var(--bg)}
+  h2{font-size:19px;margin:0 0 10px} h3{font-size:15px;margin:18px 0 8px}
+  .grid{display:grid;grid-template-columns:3fr 2fr;gap:28px} @media(max-width:860px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .entity{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px} @media(max-width:600px){.entity{grid-template-columns:1fr}}
+  .entity label{display:block;border:1.5px solid var(--line);background:var(--panel);border-radius:12px;padding:14px 16px;cursor:pointer}
+  .entity input{accent-color:var(--accent);margin-right:8px}
+  .entity label:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 3px var(--focus)}
+  .entity small{display:block;color:var(--muted);margin:2px 0 0 24px}
+  .q{font-weight:700;margin:0 0 8px}
+  .drop{border:1.5px dashed var(--line);border-radius:12px;padding:22px;text-align:center;background:var(--panel);cursor:pointer;transition:.15s}
+  .drop.over{border-color:var(--accent);background:var(--chip)}
+  .drop p{margin:4px 0;color:var(--muted);font-size:13px} .drop strong{color:var(--ink)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
+  .chip{background:var(--chip);border-radius:999px;padding:4px 6px 4px 12px;font-size:13px;display:flex;align-items:center;gap:6px}
+  .chip button{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1}
+  .found{font-size:13px;margin:8px 0 12px;display:flex;flex-wrap:wrap;gap:6px 12px}
+  .found span::before{content:"○ ";color:var(--muted)} .found span.y::before{content:"● ";color:var(--ok)}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0}
+  .metric{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .metric .l{font-size:12px;color:var(--muted)} .metric .v{font:600 24px/1.2 var(--sans);font-variant-numeric:tabular-nums;margin-top:4px}
+  .field{margin:0 0 14px} .field label{display:block;font-size:13px;margin:0 0 4px}
+  .field .hint{font-size:12px;color:var(--muted);margin-top:3px}
+  input[type=text],input[type=number],select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;
+    background:var(--bg);color:var(--ink);font:inherit} input:focus,select:focus{outline:2px solid var(--focus);border-color:var(--accent)}
+  .check{display:flex;gap:8px;align-items:flex-start;font-size:14px;margin:0 0 10px} .check input{accent-color:var(--accent);margin-top:4px}
+  details{border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:0 0 12px;background:var(--panel)}
+  summary{cursor:pointer;font-size:14px;font-weight:600} details[open] summary{margin-bottom:12px}
+  .bar{display:flex;justify-content:flex-end;gap:12px;margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+  button.btn{font:600 14px var(--sans);border-radius:9px;padding:11px 18px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .note{border-radius:10px;padding:11px 14px;margin:10px 0;font-size:14px}
+  .note.ok{background:var(--ok-bg);color:var(--ok)} .note.warn{background:var(--warn-bg);color:var(--warn)}
+  .note.err{background:var(--err-bg);color:var(--err)} .note.info{background:var(--chip)}
+  .caption{color:var(--muted);font-size:13px;margin:2px 0 10px}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:22px 0 0;overflow-x:auto}
+  .tabs button{border:0;background:none;padding:10px 12px;font:inherit;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+  .tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+  table{width:100%;border-collapse:collapse;background:var(--panel);font-size:14px}
+  th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{font-size:12px;color:var(--muted);font-weight:600;background:var(--bg)}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tr.tot td{font-weight:700}
+  .tablewrap{border:1px solid var(--line);border-radius:10px;overflow:auto;margin:8px 0 4px}
+  .tablewrap table tr:last-child td{border-bottom:0}
+  .muted{color:var(--muted);font-size:13px}
+  .overlay{position:fixed;inset:0;background:#0006;display:none;place-items:center;z-index:9}
+  .overlay.on{display:grid} .overlay div{background:var(--panel);padding:20px 26px;border-radius:12px;font-weight:600}
+  .spin{display:inline-block;width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;
+    animation:r .8s linear infinite;vertical-align:-3px;margin-right:10px} @keyframes r{to{transform:rotate(360deg)}}
+  .hidden{display:none!important}
+  footer{margin-top:36px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>IBKR-yhteenveto</h1>
+    <p>Interactive Brokersin vuosiraportit Suomen verotukseen. Kaikki lasketaan tällä koneella — mitään ei lähetetä minnekään.</p>
+  </header>
+  <nav class="stepper"><span id="s1" class="on"><b>1</b>Raportit &amp; asetukset</span><span id="s2"><b>2</b>Tulokset</span></nav>
+
+  <!-- ============================ STEP 1 ============================ -->
+  <section id="step1">
+    <p class="q">Kenen verotus lasketaan?</p>
+    <div class="entity">
+      <label><input type="radio" name="mode" value="company" checked>Osakeyhtiö (Oy)
+        <small>Kirjanpito (KPL), tase ja EVL-verolaskelma (6B)</small></label>
+      <label><input type="radio" name="mode" value="personal">Yksityishenkilö
+        <small>Pääomatulot: luovutusvoitot (9A), osingot ja korot OmaVeroon</small></label>
+    </div>
+
+    <div class="grid">
+      <div>
+        <h2>Raportit</h2>
+        <div id="drop" class="drop" tabindex="0">
+          <strong>Pudota IBKR-raportit tähän</strong>
+          <p>tai klikkaa valitaksesi · PDF ja/tai CSV · saman tilin ja kauden raportit yhdistetään</p>
+          <p>Paras: Activity Statement (CSV) + Realized Summary tai Activity Statement (PDF)</p>
+          <input id="file" type="file" accept=".pdf,.csv" multiple hidden>
+        </div>
+        <div id="chips" class="chips"></div>
+        <div id="recog" class="panel hidden" style="margin-top:14px"></div>
+      </div>
+
+      <div>
+        <h2>Asetukset</h2>
+        <div class="field"><label for="name" id="nameLbl">Yhtiö</label><input id="name" type="text"></div>
+
+        <div data-mode="company">
+          <div class="field"><label for="share_cat">Osakkeiden omaisuuslaji (EVL)</label>
+            <select id="share_cat"><option>muu omaisuus</option><option>rahoitusomaisuus</option></select>
+            <div class="hint">Ratkaisee arvonalentumisten vähennyskelpoisuuden ja EVL 8 a §:n tappiorajoituksen. Vahvista kirjanpitäjältä.</div></div>
+          <div class="field"><label for="ftt">Transaktioverot / FTT (EUR), jos puuttuu raportista</label>
+            <input id="ftt" type="number" min="0" step="0.01" value="0">
+            <div class="hint">Activity Statement → Transaction Fees. Jätä 0, jos raportissa on jo.</div></div>
+          <details><summary>Edellisen tilikauden siirtyvät erät</summary>
+            <p class="muted" style="margin-top:0">Edellisen vuoden työkirjasta (Realisoitu P_L -välilehti). Ensimmäisenä vuonna 0.</p>
+            <div class="field"><label for="wd_open">Avaavat arvonalentumiset 1.1. (EUR)</label><input id="wd_open" type="number" min="0" step="0.01" value="0"></div>
+            <div class="field"><label for="ug_open">Avaavat kirjaamattomat arvonnousut 1.1. (EUR)</label><input id="ug_open" type="number" min="0" step="0.01" value="0"></div>
+            <div class="field"><label for="cf">Käyttämättömät osaketappiot, EVL 8 a § (EUR)</label><input id="cf" type="number" min="0" step="0.01" value="0"></div>
+          </details>
+          <details><summary>Lisäasetukset</summary>
+            <div class="field"><label for="etfs">ETF/rahasto-symbolit (pilkuilla)</label><input id="etfs" type="text">
+              <div class="hint">Eivät ole osakkeita EVL 8 a §:n kannalta.</div></div>
+            <label class="check"><input id="int_credit_c" type="checkbox"> Hyvitä korkojen lähdevero Suomessa (oletus: haetaan takaisin lähdevaltiosta)</label>
+          </details>
+        </div>
+
+        <div data-mode="personal" class="hidden">
+          <div class="field"><label for="loss_cf">Aiempien vuosien vahvistetut luovutustappiot (EUR)</label>
+            <input id="loss_cf" type="number" min="0" step="0.01" value="0">
+            <div class="hint">Verotuspäätöksistä — käytettävissä 5 vuotta.</div></div>
+          <details><summary>Lisäasetukset</summary>
+            <label class="check"><input id="include_fx" type="checkbox"> Ota IBKR:n Forex-rivi mukaan valuuttojen luovutuksina
+              (oletus pois: EUR-tilillä valuuttavaikutus sisältyy jo osakkeiden EUR-hintoihin)</label>
+            <label class="check"><input id="int_credit_p" type="checkbox"> Hyvitä korkojen lähdevero Suomessa</label>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <div id="err1" class="note err hidden"></div>
+    <div class="bar"><button id="go" class="btn primary" disabled>Laske tulokset →</button></div>
+  </section>
+
+  <!-- ============================ STEP 2 ============================ -->
+  <section id="step2" class="hidden">
+    <button id="back" class="btn">← Muokkaa asetuksia</button>
+    <h2 id="heading" style="margin-top:18px"></h2>
+    <div id="caption" class="caption"></div>
+    <div id="metrics" class="metrics"></div>
+    <div id="okbox"></div>
+    <div id="warns"></div>
+    <button id="dl" class="btn primary" style="margin:6px 0 4px"></button>
+    <div id="sections"></div>
+    <div id="tabs" class="tabs"></div>
+    <div id="tabbody"></div>
+    <div id="notes"></div>
+  </section>
+
+  <footer>IBKR-yhteenveto · avoin lähdekoodi · ei veroneuvontaa — käy luvut läpi kirjanpitäjän kanssa ennen veroilmoitusta.</footer>
+</div>
+<div id="overlay" class="overlay"><div><span class="spin"></span><span id="ovtext">Luetaan raportteja…</span></div></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const sid = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)).replace(/-/g, "");
+const _e2 = new Intl.NumberFormat("fi-FI", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const _e0 = new Intl.NumberFormat("fi-FI", {maximumFractionDigits: 0});
+const eur = {format: v => _e2.format(Math.abs(v) < 0.005 ? 0 : v)};
+const eur0 = {format: v => _e0.format(Math.abs(v) < 0.5 ? 0 : v)};
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let files = [], recog = null, result = null;
+
+// ---------- persist settings (convenience only; never statement data)
+const FIELDS = ["name","share_cat","ftt","wd_open","ug_open","cf","etfs","loss_cf"];
+const CHECKS = ["int_credit_c","int_credit_p","include_fx"];
+function saveSettings(){ try{ const o={mode:mode()}; FIELDS.forEach(k=>o[k]=$("#"+k).value); CHECKS.forEach(k=>o[k]=$("#"+k).checked);
+  localStorage.setItem("ibkr-yhteenveto", JSON.stringify(o)); }catch(e){} }
+function loadSettings(){ try{ const o=JSON.parse(localStorage.getItem("ibkr-yhteenveto")||"{}");
+  FIELDS.forEach(k=>{ if(o[k]!==undefined && k!=="name") $("#"+k).value=o[k]; }); CHECKS.forEach(k=>{ if(o[k]!==undefined) $("#"+k).checked=o[k]; });
+  if(o.mode) document.querySelector(`input[name=mode][value=${o.mode}]`).checked=true; }catch(e){} }
+
+const mode = () => document.querySelector("input[name=mode]:checked").value;
+function applyMode(){
+  const m = mode();
+  document.querySelectorAll("[data-mode]").forEach(el => el.classList.toggle("hidden", el.dataset.mode !== m));
+  $("#nameLbl").textContent = m === "personal" ? "Nimi" : "Yhtiö";
+  renderRecog();
+}
+document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", () => { applyMode(); saveSettings(); }));
+document.querySelectorAll("input,select").forEach(el => el.addEventListener("change", saveSettings));
+
+// ---------- API
+async function api(path, body){
+  const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({sid, ...body})});
+  const j = await r.json(); if(!r.ok || j.error) throw new Error(j.error || r.statusText); return j;
+}
+function busy(on, text){ $("#ovtext").textContent = text || "Luetaan raportteja… (PDF voi kestää 30–60 s)"; $("#overlay").classList.toggle("on", on); }
+function showErr(msg){ const e=$("#err1"); e.textContent = msg || ""; e.classList.toggle("hidden", !msg); }
+
+// ---------- files
+const drop = $("#drop"), input = $("#file");
+drop.addEventListener("click", () => input.click());
+drop.addEventListener("keydown", e => { if(e.key==="Enter"||e.key===" ") input.click(); });
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => addFiles([...e.dataTransfer.files]));
+input.addEventListener("change", () => { const l = [...input.files]; input.value = ""; addFiles(l); });
+
+async function addFiles(list){
+  showErr(""); busy(true, "Ladataan tiedostoja…");
+  try{
+    for(const f of list){
+      if(!/\.(pdf|csv)$/i.test(f.name)){ showErr(`${f.name}: vain IBKR:n PDF- tai CSV-raportit`); continue; }
+      const r = await fetch("/api/upload", {method:"POST", headers:{"X-Session":sid, "X-Filename": encodeURIComponent(f.name)}, body: f});
+      const j = await r.json(); if(j.error) throw new Error(j.error); files = j.files;
+    }
+    renderChips(); await analyze();
+  }catch(e){ showErr(e.message); } finally{ busy(false); }
+}
+async function removeFile(name){
+  const j = await api("/api/remove", {name}); files = j.files; renderChips();
+  if(files.length) await analyze().catch(e=>showErr(e.message)); else { recog=null; renderRecog(); }
+}
+function renderChips(){
+  $("#chips").innerHTML = files.map(n => `<span class="chip">${esc(n)}<button title="Poista" data-n="${esc(n)}">×</button></span>`).join("");
+  $("#chips").querySelectorAll("button").forEach(b => b.onclick = () => removeFile(b.dataset.n));
+  $("#go").disabled = !files.length;
+}
+async function analyze(){
+  busy(true); try{ const prev = recog; recog = await api("/api/analyze", {});
+    if(!$("#name").value || (prev && prev.account !== recog.account && $("#name").value === prev.name)) $("#name").value = recog.name || "";
+    renderRecog(); }
+  finally{ busy(false); }
+}
+function renderRecog(){
+  const box = $("#recog");
+  if(!recog){ box.classList.add("hidden"); return; }
+  const m = mode(), r = recog;
+  let warn = "";
+  if(r.customer_type && r.is_corporate === (m === "personal"))
+    warn += `<div class="note warn">IBKR:n mukaan tilin tyyppi on <b>${esc(r.customer_type)}</b>, mutta valittuna on <b>${m==="personal"?"Yksityishenkilö":"Osakeyhtiö"}</b>. Tarkista valinta.</div>`;
+  if(m === "company" && !r.found["Transaktioverot (FTT)"] && !(+$("#ftt").value))
+    warn += `<div class="note info">Raportissa ei ole transaktioveroja (FTT). Jos kävit kauppaa ranskalaisilla, italialaisilla tai espanjalaisilla osakkeilla, syötä summa asetuksiin — muuten se päätyy valuuttariville.</div>`;
+  if(m === "personal" && !r.found["Kauppakohtaiset EUR-määrät"])
+    warn += `<div class="note warn">Kauppakohtaisia EUR-määriä ei löytynyt tarkkoina — lisää PDF-raportti (Forex P/L Details), muuten luovutushinnat lasketaan keskikurssilla.</div>`;
+  warn += r.warnings.map(w => `<div class="note warn">${esc(w)}</div>`).join("");
+  box.innerHTML = `
+    <div><b>Tunnistettu:</b> ${esc(r.title || "IBKR-raportti")} · <b>${esc(r.name)}</b> · tili <code>${esc(r.account)}</code> · ${esc(r.period_start)} – ${esc(r.period_end)}${r.customer_type ? " · " + esc(r.customer_type) : ""}</div>
+    <div class="found">${Object.entries(r.found).map(([k,v]) => `<span class="${v?"y":""}">${esc(k)}</span>`).join("")}</div>
+    <div class="metrics">
+      <div class="metric"><div class="l">NAV alku</div><div class="v">${eur0.format(r.nav_start)} €</div></div>
+      <div class="metric"><div class="l">NAV loppu</div><div class="v">${eur0.format(r.nav_end)} €</div></div>
+      <div class="metric"><div class="l">Nettosiirrot</div><div class="v">${eur0.format(r.net_deposits)} €</div></div>
+    </div>
+    ${m === "personal" ? `<div class="muted">Osakekauppoja EUR-määrineen: ${eur0.format(r.stock_legs)} riviä (FIFO-laskentaan).</div>` : ""}
+    ${warn}`;
+  box.classList.remove("hidden");
+}
+$("#ftt").addEventListener("input", renderRecog);
+
+// ---------- compute
+function settings(){
+  const m = mode(), o = {name: $("#name").value};
+  if(m === "company") Object.assign(o, {share_cat: $("#share_cat").value, ftt: $("#ftt").value, wd_open: $("#wd_open").value,
+    ug_open: $("#ug_open").value, cf: $("#cf").value, etfs: $("#etfs").value, int_credit: $("#int_credit_c").checked});
+  else Object.assign(o, {loss_cf: $("#loss_cf").value, include_fx: $("#include_fx").checked, int_credit: $("#int_credit_p").checked});
+  return o;
+}
+$("#go").onclick = async () => {
+  showErr(""); busy(true, "Lasketaan…");
+  try{ result = await api("/api/compute", {mode: mode(), settings: settings()}); renderResult(); step(2); }
+  catch(e){ showErr(e.message); } finally{ busy(false); }
+};
+$("#back").onclick = () => step(1);
+$("#dl").onclick = () => { location.href = `/api/xlsx?sid=${sid}`; };
+function step(n){
+  $("#step1").classList.toggle("hidden", n !== 1); $("#step2").classList.toggle("hidden", n !== 2);
+  $("#s1").classList.toggle("on", n === 1); $("#s2").classList.toggle("on", n === 2); window.scrollTo(0, 0);
+}
+
+function table(t){
+  const money = new Set(t.money);
+  const head = t.columns.map((c,i) => `<th class="${money.has(i)?"n":""}">${esc(c)}</th>`).join("");
+  const body = t.rows.map(r => {
+    const tot = typeof r[0] === "string" && r[0] === r[0].toUpperCase() && /[A-ZÄÖ]{4}/.test(r[0]);
+    return `<tr class="${tot?"tot":""}">` + r.map((v,i) => money.has(i)
+      ? `<td class="n">${typeof v === "number" ? eur.format(v) : esc(v)}</td>` : `<td>${esc(v)}</td>`).join("") + "</tr>";
+  }).join("");
+  return `<div class="tablewrap"><table><thead><tr>${head}</tr></thead><tbody>${body ||
+    `<tr><td colspan="${t.columns.length}" class="muted">Ei rivejä</td></tr>`}</tbody></table></div>`;
+}
+function renderResult(){
+  const r = result;
+  $("#heading").textContent = r.heading; $("#caption").textContent = r.caption;
+  $("#metrics").innerHTML = r.metrics.map(([l,v]) => `<div class="metric"><div class="l">${esc(l)}</div><div class="v">${eur0.format(v)} €</div></div>`).join("");
+  $("#okbox").innerHTML = r.ok === null ? "" : `<div class="note ${r.ok?"ok":"err"}">${esc(r.ok_text)}</div>`;
+  $("#warns").innerHTML = r.warnings.map(w => `<div class="note warn">${esc(w)}</div>`).join("");
+  $("#dl").textContent = "⬇ " + r.download_label;
+  $("#sections").innerHTML = r.sections.length
+    ? `<h2 style="margin-top:22px">${esc(r.sections_title)}</h2><div class="caption">${esc(r.sections_caption)}</div>` +
+      r.sections.map(s => `<h3>${esc(s.title)}</h3>${table(s.table)}`).join("") : "";
+  const names = Object.keys(r.tabs);
+  $("#tabs").innerHTML = names.map((n,i) => `<button class="${i?"":"on"}" data-t="${esc(n)}">${esc(n)}</button>`).join("");
+  const show = n => { $("#tabbody").innerHTML = table(r.tabs[n]);
+    $("#tabs").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.t === n)); };
+  $("#tabs").querySelectorAll("button").forEach(b => b.onclick = () => show(b.dataset.t));
+  show(names[0]);
+  $("#notes").innerHTML = r.notes.map(n => `<p class="muted">${esc(n)}</p>`).join("");
+}
+
+loadSettings(); applyMode();
+</script>
+</body>
+</html>

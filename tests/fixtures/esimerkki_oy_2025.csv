@@ -1,0 +1,62 @@
+Statement,Header,Field Name,Field Value
+Statement,Data,BrokerName,Interactive Brokers Ireland Limited
+Statement,Data,Title,Activity Statement
+Statement,Data,Period,"January 1, 2025 - December 31, 2025"
+Account Information,Header,Field Name,Field Value
+Account Information,Data,Name,Esimerkki Oy
+Account Information,Data,Account,U0000000
+Account Information,Data,Customer Type,Corporate
+Account Information,Data,Base Currency,EUR
+Net Asset Value,Header,Asset Class,Prior Total,Current Long,Current Short,Current Total,Change
+Net Asset Value,Data,Cash ,0,85656.5,0,85656.5,85656.5
+Net Asset Value,Data,Stock,0,20000,0,20000,20000
+Net Asset Value,Data,Interest Accruals,0,0,-31.5,-31.5,-31.5
+Net Asset Value,Data,Total,0,105625,0,105625,105625
+Change in NAV,Header,Field Name,Field Value
+Change in NAV,Data,Starting Value,0
+Change in NAV,Data,Mark-to-Market,5700
+Change in NAV,Data,Deposits & Withdrawals,100000
+Change in NAV,Data,Dividends,300
+Change in NAV,Data,Withholding Tax,-81
+Change in NAV,Data,Interest,-52.5
+Change in NAV,Data,Change in Interest Accruals,-31.5
+Change in NAV,Data,Other Fees,-10
+Change in NAV,Data,Commissions,-200
+Change in NAV,Data,Ending Value,105625
+Realized & Unrealized Performance Summary,Header,Asset Category,Symbol,Cost Adj.,Realized S/T Profit,Realized S/T Loss,Realized L/T Profit,Realized L/T Loss,Realized Total,Unrealized S/T Profit,Unrealized S/T Loss,Unrealized L/T Profit,Unrealized L/T Loss,Unrealized Total,Total,Code
+Realized & Unrealized Performance Summary,Data,Stocks,AAA,0,5000,0,0,0,5000,0,0,0,0,0,5000,
+Realized & Unrealized Performance Summary,Data,Stocks,BBB,0,0,-1000,0,0,-1000,0,0,0,0,0,-1000,
+Realized & Unrealized Performance Summary,Data,Stocks,CCC,0,0,0,0,0,0,0,-500,0,0,-500,-500,
+Realized & Unrealized Performance Summary,Data,Futures,FUT1,0,2500,-500,0,0,2000,0,0,0,0,0,2000,
+Open Positions,Header,DataDiscriminator,Asset Category,Currency,Symbol,Quantity,Mult,Cost Price,Cost Basis,Close Price,Value,Unrealized P/L,Code
+Open Positions,Data,Summary,Stocks,EUR,CCC,200,1,102.5,20500,100,20000,-500,
+Forex Balances,Header,Asset Category,Currency,Description,Quantity,Cost Price,Cost Basis in EUR,Close Price,Value in EUR,Unrealized P/L in EUR,Code
+Forex Balances,Data,Forex,EUR,EUR,85656.5,0,-85656.5,1,85656.5,0,
+Trades,Header,DataDiscriminator,Asset Category,Currency,Symbol,Date/Time,Quantity,T. Price,C. Price,Proceeds,Comm/Fee,Basis,Realized P/L,MTM P/L,Code
+Trades,Data,Order,Stocks,EUR,AAA,"2025-02-03, 10:00:00",100,100,100,-10000,-25,10025,0,0,O
+Trades,Data,Order,Stocks,EUR,AAA,"2025-06-02, 10:00:00",-100,150.5,150.5,15050,-25,-10025,5000,0,C
+Trades,Total,,Stocks,EUR,,,,,,-15975,-150,30025,4000,0,
+Trades,Total,,Futures,EUR,,,,,,0,-50,0,2000,0,
+Interest,Header,Currency,Date,Description,Amount
+Interest,Data,EUR,2025-06-03,EUR Credit Interest for May-2025,27.5
+Interest,Data,EUR,2025-12-03,EUR Debit Interest for Nov-2025,-80
+Interest,Data,Total,,,-52.5
+Interest,Data,Total Interest in EUR,,,-52.5
+Dividends,Header,Currency,Date,Description,Amount
+Dividends,Data,USD,2025-08-26,DDD(US0000000000) Cash Dividend USD 1.00 per Share (Ordinary Dividend),350
+Dividends,Data,Total,,,350
+Dividends,Data,Total in EUR,,,300
+Withholding Tax,Header,Currency,Date,Description,Amount,Code
+Withholding Tax,Data,USD,2025-08-26,DDD(US0000000000) Cash Dividend USD 1.00 per Share - DK Tax,-94.5,
+Withholding Tax,Data,Total,,,-94.5,
+Withholding Tax,Data,Total in EUR,,,-81,
+Withholding Tax,Data,Total Withholding Tax in EUR,,,-81,
+Fees,Header,Subtitle,Currency,Date,Description,Amount
+Fees,Data,Other Fees,EUR,2025-11-25,"Exposure Fee, Equity for 20251124",-10
+Fees,Data,Total,,,,-10
+Deposits & Withdrawals,Header,Currency,Settle Date,Description,Amount
+Deposits & Withdrawals,Data,EUR,2025-01-02,Electronic Fund Transfer,120000
+Deposits & Withdrawals,Data,EUR,2025-03-02,Cancellation,20000
+Deposits & Withdrawals,Data,EUR,2025-03-02,Disbursement Initiated by Account Holder,-20000
+Deposits & Withdrawals,Data,EUR,2025-03-03,Disbursement Initiated by Account Holder,-20000
+Deposits & Withdrawals,Data,Total,,,100000

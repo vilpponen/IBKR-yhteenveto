@@ -1,0 +1,16 @@
+# --- never commit real statements or generated workbooks ---
+*.pdf
+*.xlsx
+*.xls
+*.csv
+!tests/fixtures/*.csv
+statements/
+private/
+tests/local_expected.json
+.private-words
+# --- python / tooling ---
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
