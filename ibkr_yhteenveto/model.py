@@ -1,7 +1,7 @@
 """Normalized statement model. All *_eur fields are in the account base currency (EUR)."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Optional
 
 
@@ -131,6 +131,29 @@ class Statement:
     @property
     def nav_end(self) -> float:
         return self.nav_total("Total", "end")
+
+    # ---- JSON round-trip (the web UI keeps the parsed statement in the browser, not on the server)
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["etf_symbols"] = sorted(self.etf_symbols)
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Statement":
+        d = dict(d)
+        lines = ("transaction_fee_lines", "interest", "fees", "withholding", "dividends", "deposits")
+        st = cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+        st.nav = {k: NavRow(**v) for k, v in d.get("nav", {}).items()}
+        st.ru = [RURow(**r) for r in d.get("ru", [])]
+        st.positions = [Position(**r) for r in d.get("positions", [])]
+        st.forex_balances = [ForexBalance(**r) for r in d.get("forex_balances", [])]
+        for f in lines:
+            setattr(st, f, [CashLine(**r) for r in d.get(f, [])])
+        st.stock_legs = [dict(x) for x in d.get("stock_legs", [])]
+        st.etf_symbols = set(d.get("etf_symbols", []))
+        st.source_files, st.warnings = list(st.source_files), list(st.warnings)
+        st.change_in_nav, st.commissions_by_class = dict(st.change_in_nav), dict(st.commissions_by_class)
+        return st
 
     def merge(self, other: "Statement") -> None:
         """Fill gaps in self from another statement of the same account/period."""

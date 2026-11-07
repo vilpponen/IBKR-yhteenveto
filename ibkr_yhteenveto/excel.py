@@ -1,7 +1,6 @@
 """Excel workbook writer. Every derived figure is a live formula; statement data are inputs (blue)."""
 from __future__ import annotations
 
-import io
 from datetime import date
 
 from openpyxl import Workbook
@@ -9,6 +8,8 @@ from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
+
+from .xlsx_mem import workbook_bytes
 
 from .books import Books, _is_div_wht, _is_pil, classify_transfers, wht_country
 
@@ -591,6 +592,4 @@ def write_workbook(b: Books) -> bytes:
     for ws in wb.worksheets:
         ws.sheet_view.showGridLines = False
         ws.freeze_panes = None
-    bio = io.BytesIO()
-    wb.save(bio)
-    return bio.getvalue()
+    return workbook_bytes(wb)   # in memory: no temp files on disk

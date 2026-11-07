@@ -3,53 +3,50 @@
     python server.py            # http://127.0.0.1:8501  (opens the browser)
     python server.py --port 9000 --no-browser
 
-Binds to 127.0.0.1 only: statements are processed in memory on this machine and never leave it.
+Binds to 127.0.0.1 only. Stateless: the server stores nothing — no sessions, no files, no temp files.
+Each request carries what it needs (the statements, or the parsed statement the browser holds), is processed
+in memory and forgotten when the response is sent. The browser keeps the files, the parsed statement and the
+workbook; reloading the page discards them.
 """
 from __future__ import annotations
 
 import argparse
+import base64
 import json
-import secrets
-import tempfile
+import sys
 import threading
 import traceback
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.parse import urlparse
 
 from ibkr_yhteenveto import load
 from ibkr_yhteenveto.books import Settings
+from ibkr_yhteenveto.model import Statement
 from ibkr_yhteenveto.personal import PSettings
 from ibkr_yhteenveto import report
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
-MAX_FILE = 100 * 1024 * 1024
-SESSIONS: dict[str, dict] = {}   # sid -> {"files": {name: bytes}, "stmt": Statement|None, "xlsx": bytes, "fname": str}
-LOCK = threading.Lock()
+MAX_BODY = 150 * 1024 * 1024   # one request: all statements base64-encoded
+DEBUG = False                   # --debug: print tracebacks (may contain statement details) to the console
 CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
                  ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}
 
 
-def session(sid: str) -> dict:
-    if not sid or len(sid) > 64:
-        raise ValueError("bad session")
-    with LOCK:
-        return SESSIONS.setdefault(sid, {"files": {}, "stmt": None, "xlsx": None, "fname": ""})
-
-
-def parse_statement(sess: dict):
-    if sess["stmt"] is None:
-        with tempfile.TemporaryDirectory() as d:
-            paths = []
-            for name, data in sess["files"].items():
-                p = Path(d) / Path(name).name
-                p.write_bytes(data)
-                paths.append(p)
-            sess["stmt"] = load(paths)
-    return sess["stmt"]
+def decode_files(items) -> list[tuple[str, bytes]]:
+    """[{name, data(base64)}] from the browser -> [(name, bytes)], kept in memory only."""
+    out = []
+    for it in items or []:
+        name = Path(str(it.get("name", "statement"))).name
+        if Path(name).suffix.lower() not in (".pdf", ".csv"):
+            raise ValueError(f"{name}: vain IBKR:n PDF- tai CSV-raportit")
+        out.append((name, base64.b64decode(it.get("data", ""), validate=True)))
+    if not out:
+        raise ValueError("Ei tiedostoja")
+    return out
 
 
 def f(x, default=0.0) -> float:
@@ -63,7 +60,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "IBKR-yhteenveto"
 
     def log_message(self, fmt, *args):  # quieter console: one line per API call
-        if "/api/" in (args[0] if args else ""):
+        if args and "/api/" in str(args[0]):   # args[0] is an HTTPStatus for send_error()
             super().log_message(fmt, *args)
 
     # ---------------------------------------------------------------- helpers
@@ -83,8 +80,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _body(self) -> bytes:
         n = int(self.headers.get("Content-Length") or 0)
-        if n > MAX_FILE:
-            raise ValueError("Tiedosto on liian suuri")
+        if n > MAX_BODY:
+            raise ValueError("Tiedostot ovat liian suuria")
         return self.rfile.read(n)
 
     def _same_origin(self) -> bool:
@@ -100,14 +97,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._static("index.html")
         if url.path.startswith("/static/"):
             return self._static(url.path[len("/static/"):])
-        if url.path == "/api/xlsx":
-            q = parse_qs(url.query)
-            sess = session(q.get("sid", [""])[0])
-            if not sess.get("xlsx"):
-                return self._json({"error": "Ei laskettua työkirjaa"}, 404)
-            return self._send(200, sess["xlsx"],
-                              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                              {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(sess['fname'])}"})
         self._json({"error": "not found"}, 404)
 
     def _static(self, rel: str):
@@ -122,34 +111,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "forbidden"}, 403)
         url = urlparse(self.path)
         try:
-            if url.path == "/api/upload":      # raw body, one file per request
-                sess = session(self.headers.get("X-Session", ""))
-                name = Path(unquote(self.headers.get("X-Filename", "statement"))).name
-                if Path(name).suffix.lower() not in (".pdf", ".csv"):
-                    return self._json({"error": f"{name}: vain IBKR:n PDF- tai CSV-raportit"}, 400)
-                data = self._body()
-                with LOCK:
-                    sess["files"][name] = data
-                    sess["stmt"] = None
-                return self._json({"ok": True, "files": list(sess["files"])})
-
             req = json.loads(self._body() or b"{}")
-            sess = session(req.get("sid", ""))
-            if url.path == "/api/clear":
-                with LOCK:
-                    sess.update(files={}, stmt=None, xlsx=None, fname="")
-                return self._json({"ok": True})
-            if url.path == "/api/remove":
-                with LOCK:
-                    sess["files"].pop(req.get("name", ""), None)
-                    sess["stmt"] = None
-                return self._json({"ok": True, "files": list(sess["files"])})
-            if url.path == "/api/analyze":
-                if not sess["files"]:
-                    return self._json({"error": "Ei tiedostoja"}, 400)
-                return self._json(report.recognised(parse_statement(sess)))
-            if url.path == "/api/compute":
-                st = parse_statement(sess)
+            if url.path == "/api/analyze":     # statements in -> recognised summary + parsed statement out
+                st = load(decode_files(req.get("files")))
+                return self._json({"recognised": report.recognised(st), "statement": st.to_dict()})
+            if url.path == "/api/compute":     # parsed statement + settings in -> result + workbook out
+                st = Statement.from_dict(req.get("statement") or {})
                 o = req.get("settings", {})
                 if req.get("mode") == "personal":
                     res, xlsx = report.personal(st, PSettings(
@@ -163,11 +130,14 @@ class Handler(BaseHTTPRequestHandler):
                         opening_writedowns=f(o.get("wd_open")), opening_unbooked_gains=f(o.get("ug_open")),
                         evl8a_carryforward=f(o.get("cf")), credit_interest_wht=bool(o.get("int_credit")),
                         etf_symbols={x.strip() for x in str(o.get("etfs", "")).split(",") if x.strip()}))
-                sess["xlsx"], sess["fname"] = xlsx, res["filename"]
+                res["xlsx"] = base64.b64encode(xlsx).decode()
                 return self._json(res)
             return self._json({"error": "not found"}, 404)
         except Exception as e:  # report errors to the page instead of a dead request
-            traceback.print_exc()
+            if DEBUG:
+                traceback.print_exc()
+            else:  # no statement contents in logs: exception type only
+                print(f"{url.path}: {type(e).__name__} (lisätiedot: --debug)", file=sys.stderr)
             return self._json({"error": f"{type(e).__name__}: {e}"}, 500)
 
 
@@ -175,7 +145,10 @@ def main():
     ap = argparse.ArgumentParser(description="IBKR-yhteenveto local web app")
     ap.add_argument("--port", type=int, default=8501)
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--debug", action="store_true", help="print tracebacks (may include statement details)")
     a = ap.parse_args()
+    global DEBUG
+    DEBUG = a.debug
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
     url = f"http://127.0.0.1:{a.port}/"
     print(f"IBKR-yhteenveto running at {url}  (Ctrl+C to stop)")

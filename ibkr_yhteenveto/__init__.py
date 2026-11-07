@@ -10,9 +10,10 @@ from .model import Statement
 __all__ = ["load", "build", "write_workbook", "Settings", "Books", "Statement"]
 
 
-def load(paths: list[str | Path]) -> Statement:
+def load(paths: list[str | Path | tuple[str, bytes]]) -> Statement:
     """Parse one or more statements (PDF or CSV) of the same account/period and merge them.
 
+    Each item is a path, or a ``(filename, bytes)`` pair parsed in memory (nothing is written to disk).
     Put the most complete statement first (Activity Statement CSV > Activity PDF > Realized Summary PDF).
     """
     from .parse_csv import parse_csv
@@ -20,13 +21,20 @@ def load(paths: list[str | Path]) -> Statement:
 
     stmts = []
     for p in paths:
-        p = Path(p)
-        if p.suffix.lower() == ".csv":
-            stmts.append(parse_csv(p))
-        elif p.suffix.lower() == ".pdf":
-            stmts.append(parse_pdf(p))
+        if isinstance(p, tuple):
+            name, data = Path(p[0]).name, p[1]
         else:
-            raise ValueError(f"Unsupported file type: {p.name} (use IBKR PDF or CSV)")
+            name, data = Path(p).name, None
+        ext = Path(name).suffix.lower()
+        if ext == ".csv":
+            if data is None:
+                stmts.append(parse_csv(Path(p)))
+            else:
+                stmts.append(parse_csv(data.decode("utf-8-sig") + "\n", name=name))
+        elif ext == ".pdf":
+            stmts.append(parse_pdf(Path(p) if data is None else data, name=name))
+        else:
+            raise ValueError(f"Unsupported file type: {name} (use IBKR PDF or CSV)")
     # CSVs first: they carry Change in NAV and exact per-line data
     stmts.sort(key=lambda s: 0 if s.source_files[0].lower().endswith(".csv") else 1)
     main = stmts[0]
