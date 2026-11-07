@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: ✉️ Sähköposti (ei GitHub-tunnusta / yksityinen asia)
+    url: https://github.com/vilpponen/IBKR-yhteenveto#palaute
+    about: "Lähetä palaute osoitteeseen info@arxsavonum.com. Älä liitä oikeita raportteja."
+  - name: 🔒 Tietoturvaongelma
+    url: https://github.com/vilpponen/IBKR-yhteenveto/security/advisories/new
+    about: Ilmoita tietoturva-aukosta yksityisesti (ei julkista ilmoitusta).

@@ -1,0 +1,52 @@
+name: 🐞 Virheilmoitus
+description: Jokin laskee väärin, kaatuu tai ei toimi odotetusti.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Kiitos ilmoituksesta! **Ilmoitukset ovat julkisia.**
+        ⚠️ **Älä liitä oikeita IBKR-raportteja, tilinumeroita, nimiä tai summia** — et tänne etkä kuvakaappauksiin.
+        Kuvaile ongelma yleisellä tasolla tai muokkaa luvut keksityiksi. Jos tarvitset yksityisen kanavan,
+        lähetä sähköpostia osoitteeseen info@arxsavonum.com (älä silloinkaan liitä raportteja).
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Tila
+      options: ["Osakeyhtiö (Oy)", "Yksityishenkilö"]
+    validations:
+      required: true
+  - type: checkboxes
+    id: files
+    attributes:
+      label: Mitä tiedostoja käytit?
+      options:
+        - label: Activity Statement CSV
+        - label: Activity Statement PDF
+        - label: Realized Summary PDF
+  - type: dropdown
+    id: where
+    attributes:
+      label: Missä ajoit sovellusta?
+      options: ["ibkr.arxsavonum.com", "Omalla koneella (macOS)", "Omalla koneella (Windows)", "Omalla koneella (Linux)", "Komentorivi (CLI)"]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Mitä tapahtui?
+      description: Mitä teit, mitä odotit ja mitä tapahtui sen sijaan. Liitä virheilmoituksen teksti, jos sellainen tuli.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versio (omalla koneella)
+      description: "Esim. `git log --oneline -1` tai latauspäivä. Jätä tyhjäksi, jos käytit ibkr.arxsavonum.com-sivua."
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Tietosuoja
+      options:
+        - label: Ilmoituksessa ei ole oikeita raportteja, tilinumeroita, nimiä tai summia.
+          required: true

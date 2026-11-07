@@ -1,0 +1,26 @@
+name: 💡 Parannusehdotus
+description: Ehdota uutta ominaisuutta tai parannusta.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Kiitos ehdotuksesta! **Ehdotukset ovat julkisia** — älä liitä oikeita raportteja, tilinumeroita tai summia.
+        Voit lähettää ehdotuksen myös sähköpostilla: info@arxsavonum.com.
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Koskee
+      options: ["Osakeyhtiö (Oy)", "Yksityishenkilö", "Molemmat / yleinen"]
+  - type: textarea
+    id: idea
+    attributes:
+      label: Ehdotus
+      description: Mitä haluaisit sovelluksen tekevän, ja miksi se auttaisi?
+    validations:
+      required: true
+  - type: textarea
+    id: rule
+    attributes:
+      label: Verosääntö tai lähde (valinnainen)
+      description: Esim. Verohallinnon ohje, lainkohta tai kirjanpitäjän suositus.
