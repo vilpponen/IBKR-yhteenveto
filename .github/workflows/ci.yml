@@ -14,3 +14,87 @@ jobs:
       - run: pip install -r requirements.txt pytest
       - run: python scripts/check_private.py
       - run: python -m pytest -q tests
+
+  # Asennusskriptit puhtaalla koneella: zip rakennetaan kuten GitHub sen tarjoaa (git archive).
+  install-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build zip like GitHub's
+        run: git archive --format=zip --prefix=IBKR-yhteenveto-main/ HEAD -o "$RUNNER_TEMP/app.zip"
+      - name: Fresh install into empty folder, then update (curl | bash)
+        run: |
+          set -euo pipefail
+          export IBKR_ZIP_URL="file://$RUNNER_TEMP/app.zip"
+          mkdir "$RUNNER_TEMP/inst" && cd "$RUNNER_TEMP/inst"
+          bash -s -- --help < "$GITHUB_WORKSPACE/install.sh"
+          test -x .venv/bin/python && test -f .venv/.install-complete && test ! -e IBKR-yhteenveto
+          touch oma.xlsx
+          bash -s -- --help < "$GITHUB_WORKSPACE/install.sh" | tee log
+          grep -q "Päivitetään" log && test -f oma.xlsx
+      - name: Server answers
+        run: |
+          cd "$RUNNER_TEMP/inst"
+          bash run.sh --no-browser --port 8599 > server.log 2>&1 &
+          for i in $(seq 30); do curl -fs -o /dev/null http://127.0.0.1:8599/ && echo OK && exit 0; sleep 1; done
+          cat server.log; exit 1
+
+  install-windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]   # Windows PowerShell 5.1 ja PowerShell 7
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build zip like GitHub's
+        shell: bash
+        run: git archive --format=zip --prefix=IBKR-yhteenveto-main/ HEAD -o "$RUNNER_TEMP/app.zip"
+      - name: Fresh install into empty folder, then update (irm | iex)
+        run: |
+          $env:IBKR_ZIP_URL = Join-Path $env:RUNNER_TEMP 'app.zip'
+          $env:IBKR_RUN_ARGS = '--help'
+          $d = Join-Path $env:RUNNER_TEMP 'inst'
+          New-Item -ItemType Directory $d | Out-Null
+          Set-Location $d
+          Get-Content -Raw -Encoding UTF8 "$env:GITHUB_WORKSPACE\install.ps1" | Invoke-Expression
+          if ($LASTEXITCODE -ne 0) { throw "install failed ($LASTEXITCODE)" }
+          if (-not (Test-Path .venv\Scripts\python.exe)) { throw 'venv missing' }
+          if (-not (Test-Path .venv\.install-complete)) { throw 'deps marker missing' }
+          if (Test-Path IBKR-yhteenveto) { throw 'nested folder created' }
+          if ((Get-Content -Raw run.cmd) -notmatch "`r`n") { throw 'run.cmd lacks CRLF line endings' }
+          New-Item oma.xlsx | Out-Null
+          Get-Content -Raw -Encoding UTF8 "$env:GITHUB_WORKSPACE\install.ps1" | Invoke-Expression
+          if ($LASTEXITCODE -ne 0) { throw "update failed ($LASTEXITCODE)" }
+          if (-not (Test-Path oma.xlsx)) { throw 'user file lost on update' }
+      - name: Refuses a foreign IBKR-yhteenveto folder
+        run: |
+          $env:IBKR_ZIP_URL = Join-Path $env:RUNNER_TEMP 'app.zip'
+          $d = Join-Path $env:RUNNER_TEMP 'other'
+          New-Item -ItemType Directory "$d\IBKR-yhteenveto" -Force | Out-Null
+          New-Item "$d\notes.txt", "$d\IBKR-yhteenveto\b.txt" | Out-Null
+          Set-Location $d
+          Get-Content -Raw -Encoding UTF8 "$env:GITHUB_WORKSPACE\install.ps1" | Invoke-Expression
+          if ($LASTEXITCODE -ne 1) { throw 'expected refusal' }
+          if (Test-Path "$d\IBKR-yhteenveto\server.py") { throw 'foreign folder was modified' }
+          $global:LASTEXITCODE = 0
+      - name: run.cmd starts the server
+        run: |
+          $d = Join-Path $env:RUNNER_TEMP 'inst'
+          $p = Start-Process cmd.exe -ArgumentList '/c', "`"$d\run.cmd`" --no-browser --port 8599" -PassThru -WindowStyle Hidden
+          $ok = $false
+          foreach ($i in 1..30) {
+            try { Invoke-WebRequest http://127.0.0.1:8599/ -UseBasicParsing | Out-Null; $ok = $true; break } catch { Start-Sleep 1 }
+          }
+          Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+          if (-not $ok) { throw 'server did not answer' }
+          'OK'

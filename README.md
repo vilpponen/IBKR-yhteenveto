@@ -47,25 +47,33 @@ curl -fsSL https://raw.githubusercontent.com/vilpponen/IBKR-yhteenveto/main/inst
 Jos komennon ajaa kansiossa, jossa on jo muita tiedostoja (esim. kotikansio), sovellus asennetaan sen alikansioon
 `IBKR-yhteenveto`.
 
-**Windows 10/11** (PowerShell — `curl.exe` ja `tar` kuuluvat Windowsiin):
+**Windows 10/11** — avaa PowerShell (Käynnistä-valikko → kirjoita *PowerShell*). Luo sovellukselle oma kansio,
+siirry siihen ja aja asennus:
 
 ```powershell
-cd $HOME\Downloads
-curl.exe -L -o IBKR-yhteenveto.zip https://github.com/vilpponen/IBKR-yhteenveto/archive/refs/heads/main.zip
-tar -xf IBKR-yhteenveto.zip
-cd IBKR-yhteenveto-main
-py -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python server.py
+mkdir -Force $HOME\IBKR-yhteenveto
+cd $HOME\IBKR-yhteenveto
+irm https://raw.githubusercontent.com/vilpponen/IBKR-yhteenveto/main/install.ps1 | iex
 ```
 
-Selain aukeaa osoitteeseen http://127.0.0.1:8501. Lopetus: **Ctrl+C** pääteikkunassa.
+Kansio kannattaa luoda kotikansioon (`C:\Users\<nimi>\IBKR-yhteenveto`) eikä OneDriven synkronoimaan *Tiedostot*-kansioon.
+Toiminta on sama kuin macOS:ssä: lataus tähän kansioon, riippuvuudet `.venv`:iin, selain aukeaa. Skriptin voi lukea
+ennen ajoa: [install.ps1](install.ps1).
 
-Latauksen voi tehdä myös selaimella: GitHub-sivulla **Code → Download ZIP**, pura zip kaksoisklikkaamalla ja aja
-kansiossa `bash run.sh` (macOS) tai yllä olevat `py -m venv` -rivit (Windows).
+**Seuraavilla kerroilla:** kaksoisklikkaa kansion **`run.cmd`** (käynnistää ilman päivitystä), tai päivitä ja
+käynnistä samalla komennolla:
 
-Windows, seuraavat kerrat: `cd $HOME\Downloads\IBKR-yhteenveto-main; .venv\Scripts\python server.py`.
-Päivitys: poista kansio ja lataa uudelleen. Mitään ei asennu järjestelmään (riippuvuudet ovat kansion `.venv`:ssä).
+```powershell
+cd $HOME\IBKR-yhteenveto
+irm https://raw.githubusercontent.com/vilpponen/IBKR-yhteenveto/main/install.ps1 | iex
+```
+
+Selain aukeaa osoitteeseen http://127.0.0.1:8501. Lopetus: **Ctrl+C** pääteikkunassa (tai sulje ikkuna).
+Poisto: poista kansio — mitään ei asennu sen ulkopuolelle.
+
+**Ilman komentoriviä:** GitHub-sivulla **Code → Download ZIP**, pura zip ja käynnistä kansiosta `bash run.sh`
+(macOS, Päätteessä) tai kaksoisklikkaa `run.cmd` (Windows; jos Windows kysyy, valitse *Suorita*).
+Päivitys: lataa ja pura uusi zip.
 
 ### Gitin käyttäjille
 
