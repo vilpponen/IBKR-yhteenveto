@@ -153,6 +153,21 @@ kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä rapor
 Työkirja ja näkymä näyttävät, täsmääkö laskelma IBKR:n omiin lukuihin (Change in NAV): osingot, lähdeverot, korot,
 kulut, provisiot, siirrot, kaupankäynnin tulos ja NAV. Kaikkien erotusten pitää olla 0.
 
+## Palaute
+
+Virheilmoitukset ja parannusehdotukset:
+
+* **[GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues/new/choose)** — valmiit lomakkeet
+  virheilmoitukselle ja parannusehdotukselle. Ilmoitukset ovat julkisia.
+* **Sähköposti: [info@arxsavonum.com](mailto:info@arxsavonum.com?subject=IBKR-yhteenveto%20-%20palaute)** — jos
+  sinulla ei ole GitHub-tunnusta tai asia on yksityinen.
+
+⚠️ **Älä liitä oikeita IBKR-raportteja, tilinumeroita, nimiä tai summia** — et issueihin, kuvakaappauksiin etkä
+sähköpostiin. Kuvaile ongelma yleisellä tasolla tai muuta luvut keksityiksi.
+Tietoturvaongelmat ilmoitetaan yksityisesti: katso [SECURITY.md](SECURITY.md).
+
+Mitä on muuttunut: [CHANGELOG.md](CHANGELOG.md).
+
 ## Kehitys
 
 ```bash
@@ -175,4 +190,4 @@ Rakenne: `ibkr_yhteenveto/` (parserit, laskenta, Excel), `server.py` (paikalline
 Local tool that turns Interactive Brokers statements (PDF/CSV) into Finnish tax figures: bookkeeping (KPL) and
 the EVL tax bridge for a Finnish limited company, or OmaVero capital-income figures for an individual (FIFO at
 trade-date EUR rates). Runs on `127.0.0.1` with Python's standard-library HTTP server; nothing leaves your machine.
-Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Not tax advice. MIT licence.
+Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Not tax advice. MIT licence.
