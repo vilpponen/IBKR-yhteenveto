@@ -1,5 +1,13 @@
 # IBKR-yhteenveto
 
+> **Kokeile heti selaimessa: [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com)** — ei asennusta.
+> Raportit käsitellään palvelimen muistissa vain laskennan ajan, eikä **mitään tallenneta**: ei tiedostoja, ei
+> istuntoja, ei raporttien sisältöä lokeihin. Tulos ja Excel-työkirja pysyvät vain omassa selainikkunassasi.
+> Jos raportti ei saa lähteä koneeltasi lainkaan, asenna sovellus omalle koneellesi ([Käyttöönotto](#käyttöönotto)).
+> 
+> **Tarvitset:** osakeyhtiö — IBKR:n Activity Statement **CSV**; yksityishenkilö — Activity Statement **CSV + PDF**
+> samalta tililtä ja kaudelta ([lisää](#mitkä-raportit-ibkrstä)).
+
 Interactive Brokersin (IBKR) vuosiraportit Suomen verotukseen — **osakeyhtiölle** kirjanpito ja EVL-verolaskelma,
 **yksityishenkilölle** OmaVeroon ilmoitettavat pääomatulot. Tulos on Excel-työkirja, jossa kaikki luvut ovat
 kaavoja ja jokainen erä on jäljitettävissä IBKR:n raporttiin.
@@ -99,12 +107,23 @@ Päivitys: `git pull`.
 
 ## Mitkä raportit IBKR:stä
 
-| Raportti | Mistä | Antaa |
-|---|---|---|
-| **Activity Statement, CSV** | Portal → Performance & Reports → Statements → Activity → Annual / Custom → CSV | Change in NAV -tarkistukset, transaktioverot (FTT), kaikki rahaliikenne |
-| **Realized Summary tai Activity Statement, PDF** | sama, PDF | Kauppakohtaiset EUR-määrät (*Forex P/L Details*) — tarvitaan henkilön FIFO-laskentaan |
+**Lyhyesti:** osakeyhtiölle riittää **Activity Statement CSV**. Yksityishenkilölle tarvitaan **CSV + PDF**
+(saman tilin ja saman kauden Activity Statement molempina), jos tilillä on kauppoja muussa kuin euroissa.
 
-Pudota saman tilin ja kauden raportit yhdessä — ne yhdistetään (CSV:stä tarkistukset, PDF:stä tarkat kauppakurssit).
+| Kenelle | Vähintään | Suositus | Miksi |
+|---|---|---|---|
+| **Osakeyhtiö** | Activity Statement **CSV** | CSV (PDF ei muuta tulosta) | CSV:ssä on kaikki: NAV, Change in NAV -tarkistukset, R&U-tulokset, positiot, rahaliikenne ja transaktioverot (FTT) |
+| **Yksityishenkilö** | Activity Statement **CSV** | **CSV + PDF** | Verohallinnon tapa vaatii jokaiselle kaupalle EUR-määrän kauppapäivän kurssilla. Ne ovat vain PDF:n *Forex P/L Details* -osiossa. Pelkällä CSV:llä valuuttamääräiset kaupat muunnetaan keskikurssilla (työkalu varoittaa) — testiaineistossa pääomatulo oli noin 3 % liian suuri. Jos kaikki kaupat ovat euroissa, CSV riittää. |
+
+Pelkkä PDF toimii myös, mutta siitä puuttuvat IBKR:n Change in NAV -tarkistukset (laskelman täsmäytys IBKR:n
+omiin lukuihin), ja *Realized Summary* -PDF:stä lisäksi transaktioverot.
+
+**Näin lataat raportit:** IBKR Portal → **Performance & Reports → Statements → Activity**
+→ jakso **Annual** (tai *Custom*: 1.1.–31.12.) → muoto **CSV**, ja yksityishenkilölle sama uudelleen muodossa
+**PDF**. Valitse molempiin sama tili ja sama jakso.
+
+Pudota tiedostot sovellukseen yhdessä — ne yhdistetään (CSV:stä tarkistukset ja rahaliikenne, PDF:stä tarkat
+kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä raporteista löytyi ja mitä puuttuu.
 
 ## Osakeyhtiö (Oy)
 
@@ -156,4 +175,4 @@ Rakenne: `ibkr_yhteenveto/` (parserit, laskenta, Excel), `server.py` (paikalline
 Local tool that turns Interactive Brokers statements (PDF/CSV) into Finnish tax figures: bookkeeping (KPL) and
 the EVL tax bridge for a Finnish limited company, or OmaVero capital-income figures for an individual (FIFO at
 trade-date EUR rates). Runs on `127.0.0.1` with Python's standard-library HTTP server; nothing leaves your machine.
-`./run.sh` to start. Not tax advice. MIT licence.
+Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Not tax advice. MIT licence.
