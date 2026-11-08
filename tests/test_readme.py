@@ -20,7 +20,9 @@ def test_readme_matches_changelog_and_links_resolve():
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert rs.problems(readme, changelog) == []
     assert len(rs.releases(changelog)) == 5
-    assert not any("Tulossa" in r for r in rs.releases(changelog))
+    assert not any("Tulossa" in h for _, h in rs.releases(changelog))
+    ds = rs.dates(changelog)
+    assert len(ds) == len(set(ds))                       # one heading per date
 
 
 def test_no_pr_links_in_readme_list():
@@ -30,8 +32,23 @@ def test_no_pr_links_in_readme_list():
     assert "/pull/" not in block
 
 
+def test_grouped_by_date():
+    changelog = ("## Tulossa (dev)\n\n### Ei julkaistu\n\n## 2026-01-02\n\n### C ([#3](u))\n\n### B ([#2](u))\n\n"
+                 "## 2026-01-01\n\n### A ([#1](u))\n")
+    assert rs.releases(changelog) == [("2026-01-02", "C ([#3](u))"), ("2026-01-02", "B ([#2](u))"), ("2026-01-01", "A ([#1](u))")]
+    block = rs.expected_block(changelog)
+    assert "* **2026-01-02** — C · B\n* **2026-01-01** — A" in block and "Ei julkaistu" not in block
+
+
 def test_mismatch_detected():
-    changelog = "## Tulossa (dev)\n\n## 2026-01-02 — B\n\n## 2026-01-01 — A\n"
-    readme = f"## Viimeisimmät muutokset\n{rs.START}\n* 2026-01-01 — A\n{rs.END}\n[x](#puuttuu)\n"
+    changelog = "## Tulossa (dev)\n\n## 2026-01-02\n\n### B\n\n## 2026-01-01\n\n### A\n"
+    readme = f"## Viimeisimmät muutokset\n{rs.START}\n* **2026-01-01** — A\n{rs.END}\n[x](#puuttuu)\n"
     errs = rs.problems(readme, changelog)
     assert any("differs" in e for e in errs) and any("#puuttuu" in e for e in errs)
+
+
+def test_duplicate_dates_and_old_format_rejected():
+    errs = rs.problems("", "## 2026-01-02\n\n### B\n\n## 2026-01-02\n\n### A\n")
+    assert any("appears more than once" in e for e in errs)
+    errs = rs.problems("", "## 2026-01-02 — B\n")
+    assert any("use '## date'" in e for e in errs)

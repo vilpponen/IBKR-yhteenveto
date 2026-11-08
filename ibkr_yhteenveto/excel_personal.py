@@ -11,7 +11,7 @@ from .xlsx_mem import workbook_bytes
 
 from .books import _is_div_wht, _is_pil, wht_country
 from .excel import FILL_KEY, NUM, PCT, Sheet
-from .personal import PBooks, _is_cfd_cost
+from .personal import SOURCES, PBooks, _is_cfd_cost
 
 
 def write_personal_workbook(b: PBooks) -> bytes:
@@ -24,7 +24,8 @@ def write_personal_workbook(b: PBooks) -> bytes:
 
     om = Sheet(wb, "OmaVero-kentät", [42, 58, 18, 60])
     sm = Sheet(wb, "Arvopaperit yhteenveto", [14, 16, 18, 18, 16, 16, 16, 16, 30])
-    lu = Sheet(wb, "Luovutukset (FIFO)", [14, 12, 12, 12, 16, 16, 16, 20, 8])
+    lu = Sheet(wb, "Luovutukset (FIFO)", [14, 12, 12, 12, 16, 16, 16, 30, 8, 16])
+    va = Sheet(wb, "Vuoden alun erät", [14, 12, 16, 16, 16, 12, 12, 40]) if b.opening else None
     de = Sheet(wb, "Johdannaiset", [16, 22, 16, 16, 16, 30])
     dv = Sheet(wb, "Osingot & lähdeverot", [12, 62, 8, 14, 14, 10, 8, 22])
     kk = Sheet(wb, "Korot & kulut", [12, 58, 8, 14, 14, 30])
@@ -58,13 +59,13 @@ def write_personal_workbook(b: PBooks) -> bytes:
              [sub, "EUR: myyntihinta myyntipäivän ja hankintameno ostopäivän kurssilla (IBKR Forex P/L Details).",
               "Myyntihinnasta on vähennetty myyntiprovisio; hankintamenoon sisältyy ostoprovisio."])
     lu.header(["Symboli", "Myyntipäivä", "Ostopäivä", "Määrä", "Luovutushinta €", "Hankintameno €",
-               "Voitto/tappio €", "Lähde", "Short"])
+               "Voitto/tappio €", "Lähde", "Short", "Sis. optiopreemio €"])
     r0 = lu.r
     for m in b.matches:
         r = lu.r
         lu.row([m.symbol, m.sale_date, m.buy_date, m.qty, round(m.proceeds, 2), round(m.cost, 2), f"=E{r}-F{r}",
-                m.source, "Kyllä" if m.short else ""],
-               ["in", "in", "in", "in", "in", "in", "f", "t", "t"], fmt=[None, None, None, "#,##0.####"])
+                m.source, "Kyllä" if m.short else "", round(m.premium, 2) if m.premium else None],
+               ["in", "in", "in", "in", "in", "in", "f", "t", "t", "in"], fmt=[None, None, None, "#,##0.####"])
     r1 = max(lu.r - 1, r0)
     LU = dict(sym=f"'{lu.name}'!$A${r0}:$A${r1}", L=f"'{lu.name}'!$E${r0}:$E${r1}",
               H=f"'{lu.name}'!$F${r0}:$F${r1}", R=f"'{lu.name}'!$G${r0}:$G${r1}")
@@ -76,6 +77,33 @@ def write_personal_workbook(b: PBooks) -> bytes:
     rt = lu.row(["Tappiot", None, None, None, None, None, f'=SUMIF(G{r0}:G{r1},"<0")'], bold=True)
     ref["T"] = lu.q(f"G{rt}")
 
+    # ---------------------------------------------------------------- Vuoden alun erät
+    if va:
+        va.title("Vuoden alun positiot (edellisinä vuosina avatut erät)",
+                 [sub, "Tänä vuonna luovutetut erät, jotka on avattu ennen kautta, ja niiden hankintamenon peruste.",
+                  "Verohallinto: luovuttajan on pystyttävä esittämään alkuperäinen hankintahinta; muuten "
+                  "hankintameno-olettama."])
+        va.header(["Symboli", "Määrä", "Luovutushinnat €", "Hankintamenot €", "Tulos €", "Ensimmäinen myynti",
+                   "Viimeinen myynti", "Käsittely"])
+        for o in b.opening:
+            r = va.r
+            meth = ", ".join(SOURCES.get(k, k) for k in o["methods"])
+            if o.get("kind") == "option":
+                prem = sum(e["premium_eur"] for e in b.option_events if e["symbol"] == o["symbol"])
+                va.row([o["symbol"] + " (optio)", o["qty"], None, round(prem, 2), None, o["first_sale"], o["last_sale"],
+                        meth + " — preemio, toteutettu"], ["in", "in", None, "in", None, "in", "in", "t"],
+                       fmt=[None, "#,##0.####"])
+                continue
+            va.row([o["symbol"] + (" (short)" if o["short"] else ""), o["qty"], round(o["proceeds_eur"], 2),
+                    round(o["cost_eur"], 2), f"=C{r}-D{r}", o["first_sale"], o["last_sale"], meth],
+                   ["in", "in", "in", "in", "f", "in", "in", "t"], fmt=[None, "#,##0.####"])
+        va.blank()
+        va.note("Käsittelytavat: Käyttäjän syöttämä = alkuperäiset ostotiedot; Edellisvuoden raportti = erä luettu "
+                "aiemman kauden IBKR-raportista; Hankintameno-olettama = 20 % (40 % jos omistettu ≥ 10 v) "
+                "luovutushinnasta; IBKR-päättely = hankintameno johdettu IBKR:n realisoidusta tuloksesta.")
+        if b.preliminary:
+            va.note("⚠ KESKENERÄINEN: osalle eristä ei ole valittu käsittelytapaa (RATKAISEMATON).")
+
     # ---------------------------------------------------------------- Arvopaperit yhteenveto
     sm.title("Arvopaperit symboleittain", [sub, "Vertailu: IBKR R&U (IBKR muuntaa voiton myyntipäivän kurssilla; Vero käyttää kahta kurssia)."])
     sm.header(["Symboli", "Luovutushinnat", "Hankintamenot", "Voitot", "Tappiot", "Netto (FIFO)", "IBKR R&U", "Ero", "Huom."])
@@ -85,7 +113,8 @@ def write_personal_workbook(b: PBooks) -> bytes:
                     f'=SUMIFS({LU["R"]},{LU["sym"]},A{sm.r},{LU["R"]},">0")',
                     f'=SUMIFS({LU["R"]},{LU["sym"]},A{sm.r},{LU["R"]},"<0")', f"=D{sm.r}+E{sm.r}",
                     b.ru_by_symbol.get(sym, 0.0), f"=F{sm.r}-G{sm.r}",
-                    "Avaava erä edellisvuodelta" if any(m.symbol == sym and m.source != "FIFO" for m in b.matches) else ""],
+                    "Vuoden alun erä: " + ", ".join(sorted({m.source for m in b.matches if m.symbol == sym and m.method != "fifo"}))
+                    if any(m.symbol == sym and m.method != "fifo" for m in b.matches) else ""],
                    ["in", "f", "f", "f", "f", "f", "in", "f", "t"])
 
     # ---------------------------------------------------------------- Johdannaiset
@@ -110,6 +139,18 @@ def write_personal_workbook(b: PBooks) -> bytes:
         ref.update(FXG=de.q(f"C{r}") if s.include_fx else "0", FXL=de.q(f"D{r}") if s.include_fx else "0")
     else:
         ref.update(FXG="0", FXL="0")
+    if b.option_events:
+        de.blank()
+        de.section("TOTEUTETUT OPTIOT — preemio osakkeisiin (KHO 2012:69)", 6)
+        de.header(["Päivä", "Optio", "Preemio €", "Sopimuksia", "Kohde-etuus", "Käsittely"])
+        for ev in b.option_events:
+            de.row([ev["date"], ev["symbol"], round(ev["premium_eur"], 2) if ev["kind"] == "exercise" else None,
+                    ev["contracts"], ev["underlying"],
+                    ev.get("target", "") + " · " + ", ".join(SOURCES.get(k, k) for k in ev["methods"])],
+                   ["in", "in", "in", "in", "in", "t"])
+        de.note("Toteutetun osto-option preemio lisätään osakkeiden hankintamenoon; toteutetun myyntioption preemio "
+                "vähennetään luovutushinnasta. Optiorivin oma tulos on IBKR:llä 0, joten preemio ei ole Johdannaiset-"
+                "riveillä kahteen kertaan.")
     de.blank()
     de.section("CFD:T (muu pääomatulo, 16B) — voitot kauppakohtaisesti, tappioita ei huomioida", 6)
     de.header(["Päivä", "Symboli", "Tulos €", "Luokka", None, "Lähde"])
@@ -225,7 +266,9 @@ def write_personal_workbook(b: PBooks) -> bytes:
          "Vero vahvistaa luovutustappion (5 v); korkojen alijäämä hyvitetään ansiotulojen verosta")
 
     # ---------------------------------------------------------------- OmaVero-kentät
-    om.title("OmaVero — täytettävät tiedot", [sub, "Paljon kauppoja: ilmoita yhteenvetona ja liitä tämä työkirja erittelyksi."])
+    om.title("OmaVero — täytettävät tiedot", [sub, "Paljon kauppoja: ilmoita yhteenvetona ja liitä tämä työkirja erittelyksi."]
+             + (["⚠ KESKENERÄINEN LASKELMA: vuoden alun positioiden käsittely on valitsematta (ks. Vuoden alun erät)."]
+                if b.preliminary else []))
     om.header(["Osio", "Kenttä", "EUR", "Huom."])
     links = {
         "Osakkeet ja rahastot — luovutushinnat yhteensä": f"={ref['L']}",
@@ -264,12 +307,24 @@ def write_personal_workbook(b: PBooks) -> bytes:
     for k, t in [
         ("FIFO", "Verohallinto edellyttää, että samanlajiset arvopaperit katsotaan myydyiksi hankintajärjestyksessä (FIFO) "
                  "arvo-osuustilikohtaisesti. Tämä työkirja laskee FIFO:n itse IBKR:n kauppariveistä."),
+        ("Vuoden alun positiot", "Erät, jotka on avattu ennen laskentakautta, käsitellään käyttäjän valinnan mukaan: "
+                                 "alkuperäiset ostotiedot, aiemman kauden IBKR-raportti (erähistoria FIFO-järjestyksessä), "
+                                 "hankintameno-olettama tai IBKR:n realisoidusta tuloksesta johdettu hankintameno. "
+                                 "Peruste näkyy erittäin Luovutukset- ja Vuoden alun erät -välilehdillä. Olettamaa "
+                                 "käytettäessä luovutushintana on provisiolla vähennetty hinta (tarkennetaan tehtävässä "
+                                 "hankintameno-olettama hankintaerittäin)."),
         ("Valuuttakurssit", "Luovutushinta muunnetaan euroiksi myyntipäivän ja hankintameno ostopäivän kurssilla "
                             "(IBKR Forex P/L Details, kauppakohtaiset EUR-määrät)."),
         ("Hankintameno-olettama", "20 % (40 % jos omistettu ≥ 10 v) myyntihinnasta voidaan käyttää todellisen hankintamenon "
                                   "sijaan, jos se on suurempi — kannattaa vain suurivoittoisissa, pitkään pidetyissä erissä."),
         ("Johdannaiset", "Futuurit ja optiot: voitot ja tappiot IBKR:n realisoiduista tuloksista. Tappiot vähennetään "
                          "luovutusvoitoista ja muista pääomatuloista (5 v)."),
+        ("Optioiden toteutus", "Kun ostettu osto-optio toteutetaan, maksettu preemio kaupankäyntikuluineen kuuluu "
+                               "osakkeiden hankintamenoon (KHO 2012:69); ostetun myyntioption preemio vähennetään "
+                               "osakkeiden luovutushinnasta. Preemio muunnetaan euroiksi option ostopäivän kurssilla. "
+                               "Toteutus yhdistetään osakekauppaan saman päivän, kohde-etuuden ja määrän (sopimukset × "
+                               "kerroin) perusteella. Asetetun option toteutusvelvoitteessa osakkeiden hintaa ei oikaista "
+                               "(asettajan preemio verotetaan asetusvuonna)."),
         ("CFD:t", "Verohallinto: CFD-hinnanerosopimuksiin ei sovelleta luovutusvoittoverotuksen säännöksiä. Voitto on "
                   "pääomatuloa (OmaVero: muut pääomatulot), tappiota ei huomioida verotuksessa millään tavalla, ja jokainen "
                   "kauppa arvioidaan erikseen. Laskelma: kunkin sulkevan kaupan IBKR:n realisoitu tulos (CSV Trades, EUR "

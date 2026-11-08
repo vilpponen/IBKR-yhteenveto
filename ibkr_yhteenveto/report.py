@@ -7,7 +7,7 @@ from .books import Books, Settings, build, classify_transfers
 from .excel import write_workbook
 from .excel_personal import write_personal_workbook
 from .model import Statement
-from .personal import PBooks, PSettings, build_personal, omavero_fields
+from .personal import SOURCES, PBooks, PSettings, build_personal, omavero_fields, opening_lots
 
 
 
@@ -37,6 +37,9 @@ def recognised(st: Statement) -> dict:
         "found": found, "nav_start": st.nav_start, "nav_end": st.nav_end,
         "net_deposits": st.deposits_total_eur or 0.0, "stock_legs": len(st.stock_legs),
         "is_corporate": any(k in (st.customer_type or "").lower() for k in ("corporate", "institution")),
+        "history_periods": list(st.history_periods),
+        # year-start positions consumed this period that need the user's decision (personal mode)
+        "opening_lots": opening_lots(st),
         "warnings": list(st.warnings),
     }
 
@@ -122,6 +125,7 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
             ["Pääomatulo (IBKR)", v["capital_income"]], ["Pääomatulovero, arvio", v["tax_net"]],
         ],
         "ok": None, "ok_text": "",
+        "preliminary": pb.preliminary,
         "warnings": warnings,
         "download_label": "Lataa Excel (OmaVero-erittely)",
         "filename": f"{(s.name or st.name).replace(' ', '_')}_IBKR_{st.period_end[:4]}_omavero.xlsx",
@@ -159,4 +163,23 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
     }
     if not pb.cfd_rows:
         del res["tabs"]["CFD:t"]
+    if pb.opening:
+        res["tabs"]["Vuoden alun erät"] = _t(
+            ["Symboli", "Määrä", "Luovutushinnat", "Hankintamenot", "Tulos", "Käsittely"],
+            [[o["symbol"] + (" (short)" if o["short"] else ""), o["qty"], o["proceeds_eur"], o["cost_eur"],
+              o["proceeds_eur"] - o["cost_eur"], ", ".join(SOURCES.get(k, k) for k in o["methods"])]
+             if o.get("kind") != "option" else
+             [o["symbol"] + " (optio)", o["qty"], "–",
+              sum(e["premium_eur"] for e in pb.option_events if e["symbol"] == o["symbol"]), "–",
+              ", ".join(SOURCES.get(k, k) for k in o["methods"]) + " — preemio"]
+             for o in pb.opening], [2, 3, 4])
+    if pb.option_events:
+        res["tabs"]["Toteutetut optiot"] = _t(
+            ["Päivä", "Optio", "Kohde-etuus", "Sopimuksia", "Preemio", "Käsittely"],
+            [[e["date"], e["symbol"], e["underlying"], e["contracts"],
+              e["premium_eur"] if e["kind"] == "exercise" else "–",
+              e.get("target", "") + " · " + ", ".join(SOURCES.get(k, k) for k in e["methods"])]
+             for e in pb.option_events], [4])
+    # open lots at period end -> JSON the user can import next year as year-start choices
+    res["end_lots"] = {"account": st.account, "as_of": st.period_end, "lots": pb.end_lots}
     return res, write_personal_workbook(pb)

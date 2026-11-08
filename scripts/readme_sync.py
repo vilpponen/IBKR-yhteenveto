@@ -4,8 +4,11 @@
     python scripts/readme_sync.py           # check (exit 1 on mismatch) — also run by tests/test_readme.py in CI
     python scripts/readme_sync.py --write   # rewrite README's "Viimeisimmät muutokset" list from CHANGELOG.md
 
-"Viimeisimmät muutokset" lists the 5 newest released CHANGELOG entries (the "Tulossa (dev)" section is not a release)
-between the <!-- muutokset:alku --> and <!-- muutokset:loppu --> markers, as "date — title" only (no PR links). Every in-page link (#anchor) in README must
+CHANGELOG.md has one "## YYYY-MM-DD" heading per date; each release is a "### Title ([#N](…))" under it (the
+"## Tulossa (dev)" section is not a release). A date must not appear twice.
+
+README's "Viimeisimmät muutokset" (between <!-- muutokset:alku --> and <!-- muutokset:loppu -->) shows the 5 newest
+releases, one line per date: "* **date** — title · title" (no PR links). Every in-page link (#anchor) in README must
 point to a heading, using GitHub's anchor rules (lowercase, spaces → '-', punctuation dropped, ä/ö kept).
 """
 from __future__ import annotations
@@ -46,9 +49,23 @@ def anchors(md: str) -> set[str]:
     return out
 
 
-def releases(changelog: str) -> list[str]:
-    heads = [m.group(1) for m in re.finditer(r"^## (.+)$", changelog, re.M)]
-    return [h for h in heads if re.match(r"\d{4}-\d{2}-\d{2}", h)][:N]
+DATE_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2})\s*$")
+
+
+def dates(changelog: str) -> list[str]:
+    return [m.group(1) for line in changelog.splitlines() if (m := DATE_RE.match(line))]
+
+
+def releases(changelog: str) -> list[tuple[str, str]]:
+    """(date, release heading) for the N newest releases, newest first."""
+    out, date = [], None
+    for line in changelog.splitlines():
+        if line.startswith("## "):
+            m = DATE_RE.match(line)
+            date = m.group(1) if m else None
+        elif line.startswith("### ") and date:
+            out.append((date, line[4:].strip()))
+    return out[:N]
 
 
 def plain(heading: str) -> str:
@@ -57,12 +74,23 @@ def plain(heading: str) -> str:
 
 
 def expected_block(changelog: str) -> str:
-    lines = [f"* {plain(h)}" for h in releases(changelog)]
+    by_date: dict[str, list[str]] = {}
+    for d, h in releases(changelog):
+        by_date.setdefault(d, []).append(plain(h))
+    lines = [f"* **{d}** — {' · '.join(titles)}" for d, titles in by_date.items()]
     return "\n".join([START, *lines, "", "Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).", END])
 
 
 def problems(readme: str, changelog: str) -> list[str]:
     errs = []
+    ds = dates(changelog)
+    for d in sorted({d for d in ds if ds.count(d) > 1}):
+        errs.append(f"CHANGELOG: date {d} appears more than once — put all releases of a day under one '## {d}'")
+    if ds != sorted(ds, reverse=True):
+        errs.append("CHANGELOG: date headings must be newest first")
+    for line in changelog.splitlines():
+        if re.match(r"^## \d{4}-\d{2}-\d{2}\s+\S", line):
+            errs.append(f"CHANGELOG: '{line}' — use '## date' and put the release title under it as '### title'")
     if START not in readme or END not in readme:
         errs.append(f"README: markers {START} / {END} missing")
     else:

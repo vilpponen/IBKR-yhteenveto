@@ -116,6 +116,14 @@ class Statement:
     stock_legs: list[dict] = field(default_factory=list)
     # realized P/L per closing CFD trade (CSV Trades): {"date","symbol","cls","ccy","pl","eur"} — eur None = unconverted
     cfd_trades: list[dict] = field(default_factory=list)
+    # option trades (CSV Trades, option classes): {"date","symbol","underlying","right","mult","qty","ccy","code","eur"}
+    # eur = premium cash net of commission (paid for buys, received for sells); None = unconverted
+    option_trades: list[dict] = field(default_factory=list)
+    # stock rows created by exercise/assignment (CSV, code Ex/A): {"date","symbol","qty","basis","cash","ccy","code"}
+    exercise_rows: list[dict] = field(default_factory=list)
+    # stock legs from statements of EARLIER periods of the same account (lot history for year-start positions)
+    history_legs: list[dict] = field(default_factory=list)
+    history_periods: list[str] = field(default_factory=list)   # "YYYY-MM-DD – YYYY-MM-DD" per earlier period
     etf_symbols: set[str] = field(default_factory=set)  # from Financial Instrument Information (CSV)
     warnings: list[str] = field(default_factory=list)
 
@@ -153,6 +161,10 @@ class Statement:
             setattr(st, f, [CashLine(**r) for r in d.get(f, [])])
         st.stock_legs = [dict(x) for x in d.get("stock_legs", [])]
         st.cfd_trades = [dict(x) for x in d.get("cfd_trades", [])]
+        st.history_legs = [dict(x) for x in d.get("history_legs", [])]
+        st.option_trades = [dict(x) for x in d.get("option_trades", [])]
+        st.exercise_rows = [dict(x) for x in d.get("exercise_rows", [])]
+        st.history_periods = list(d.get("history_periods", []))
         st.etf_symbols = set(d.get("etf_symbols", []))
         st.source_files, st.warnings = list(st.source_files), list(st.warnings)
         st.change_in_nav, st.commissions_by_class = dict(st.change_in_nav), dict(st.commissions_by_class)
@@ -169,7 +181,8 @@ class Statement:
             for k, v in getattr(other, f).items():
                 d.setdefault(k, v)
         for f in ("ru", "positions", "forex_balances", "interest", "fees", "withholding",
-                  "dividends", "deposits", "transaction_fee_lines", "stock_legs", "cfd_trades"):
+                  "dividends", "deposits", "transaction_fee_lines", "stock_legs", "cfd_trades",
+                  "option_trades", "exercise_rows"):
             if not getattr(self, f) and getattr(other, f):
                 setattr(self, f, getattr(other, f))
         # exact per-trade EUR legs (PDF Forex P/L Details) beat CSV legs converted at an average rate

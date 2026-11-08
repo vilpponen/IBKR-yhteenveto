@@ -24,6 +24,13 @@ palvelimella muiden käyttöön; silloin sivu kertoo käyttäjälle, että rapor
 > ⚠️ **Ei veroneuvontaa.** Työkalu tekee laskelman ja näyttää perusteet, mutta tulkinnat (esim. omaisuuslaji,
 > lähdeverojen hyvitys) kannattaa vahvistaa kirjanpitäjältä tai Verohallinnosta. Säännöt: verovuodet 2025–2026.
 
+> ℹ️ **Kenelle työkalu sopii nyt.** Työkalu on tällä hetkellä tehty ensisijaisesti **aktiiviselle kaupankävijälle,
+> jonka salkku on vuoden alussa tyhjä** (positiot avataan ja suljetaan saman vuoden aikana). Aiempina vuosina
+> ostetuille erille sovellus kysyy käsittelytavan ([Vuoden alun positiot](#vuoden-alun-positiot)). Asetetut optiot
+> (toteutusvelvoite, vuodenvaihde), yritystapahtumat (esim. splitit) ja kryptot ovat vielä rajallisesti tuettuja —
+> laskelma varoittaa niistä. Työkalua kehitetään palautteen perusteella
+> ([Palaute](#palaute)).
+
 **Sisällysluettelo**
 
 * [Käyttöönotto](#käyttöönotto)
@@ -127,6 +134,9 @@ Päivitys: `git pull`.
 | **Osakeyhtiö** | Activity Statement **CSV** | CSV (PDF ei muuta tulosta) | CSV:ssä on kaikki: NAV, Change in NAV -tarkistukset, R&U-tulokset, positiot, rahaliikenne ja transaktioverot (FTT) |
 | **Yksityishenkilö** | Activity Statement **CSV** | **CSV + PDF** | Verohallinnon tapa vaatii jokaiselle kaupalle EUR-määrän kauppapäivän kurssilla. Ne ovat vain PDF:n *Forex P/L Details* -osiossa. Pelkällä CSV:llä valuuttamääräiset kaupat muunnetaan keskikurssilla (työkalu varoittaa) — testiaineistossa pääomatulo oli noin 3 % liian suuri. Jos kaikki kaupat ovat euroissa, CSV riittää. |
 
+**Aiempina vuosina ostetut osakkeet (yksityishenkilö):** lisää samaan latauslaatikkoon myös edellisten vuosien
+Activity Statementit (CSV + PDF). Uusin kausi lasketaan, ja aiemmista luetaan ostoerät EUR-määrineen.
+
 Pelkkä PDF toimii myös, mutta siitä puuttuvat IBKR:n Change in NAV -tarkistukset (laskelman täsmäytys IBKR:n
 omiin lukuihin), ja *Realized Summary* -PDF:stä lisäksi transaktioverot.
 
@@ -154,13 +164,28 @@ kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä rapor
 * **Arvopaperit (9A):** FIFO hankintaerittäin IBKR:n kauppakohtaisista EUR-määristä — myyntihinta myyntipäivän ja
   hankintameno ostopäivän kurssilla (Verohallinnon tapa). Luovutushinnat, hankintamenot, voitot ja tappiot.
 * **Johdannaiset** (futuurit, optiot): voitot ja tappiot.
+* **Optioiden toteutus:** ostetun osto-option preemio lisätään saatujen osakkeiden hankintamenoon ja ostetun
+  myyntioption preemio vähennetään osakkeiden luovutushinnasta (KHO 2012:69). Tarvitsee Activity Statement CSV:n.
 * **CFD:t:** voitot kauppakohtaisesti muuna pääomatulona; tappiot eivät ole vähennyskelpoisia, joten niitä ei
   huomioida (Verohallinto). Kauppakohtainen erittely tarvitsee Activity Statement CSV:n.
 * **Ulkomaan pääomatulot (16B):** osingot (85 % veronalaista), lähdeveron hyvitys sopimusrajaan asti, korot.
 * **Vähennykset:** marginaalilainan korot, IBKR-kulut, aiempien vuosien vahvistetut tappiot.
 * **Pienten luovutusten verovapaus** (luovutushinnat ≤ 1 000 €), pääomatulovero 30 % / 34 % (> 30 000 €).
-* Edellisvuosien erät, joiden ostokurssia raportissa ei ole, merkitään ja niiden hankintameno johdetaan IBKR:n
-  realisoidusta tuloksesta.
+* **Vuoden alun positiot:** katso alta.
+
+### Vuoden alun positiot
+
+Jos tänä vuonna myydään osakkeita, jotka on ostettu ennen raportin kautta, hankintameno puuttuu raportista.
+Sovellus ei täydennä sitä hiljaa, vaan kysyy ennen tuloksia jokaiselle osakkeelle käsittelytavan:
+
+1. **Edellisen vuoden IBKR-raportti** — lisää se latauslaatikkoon; erät luetaan siitä automaattisesti (FIFO).
+2. **Alkuperäiset ostotiedot** — ostopäivä ja hankintameno euroina.
+3. **Hankintameno-olettama** — 20 % luovutushinnasta (40 %, jos omistettu vähintään 10 vuotta); vaatii ostopäivän.
+4. **IBKR:n luku** — hankintameno johdetaan IBKR:n realisoidusta tuloksesta; merkitään työkirjaan.
+
+Valinnat voi viedä ja tuoda JSON-tiedostona, ja tulossivulta saa vuoden lopun avoimet erät JSON-tiedostona ensi
+vuoden laskelmaa varten. *Laske silti* näyttää tulokset keskeneräisiksi merkittyinä. Valinnat pysyvät vain
+selaimessa.
 
 ## Tarkistukset
 
@@ -183,11 +208,8 @@ Tietoturvaongelmat ilmoitetaan yksityisesti: katso [SECURITY.md](SECURITY.md).
 ## Viimeisimmät muutokset
 
 <!-- muutokset:alku -->
-* 2026-11-08 — CFD-korjaus ja README-sisällysluettelo
-* 2026-11-07 — Palautekanavat
-* 2026-11-07 — Demo ja ohjeet
-* 2026-11-07 — Palvelin ei tallenna mitään
-* 2026-11-07 — Windows-asennus
+* **2026-11-08** — Vuoden alun positiot ja toteutetut optiot · CFD-korjaus ja README-sisällysluettelo
+* **2026-11-07** — Palautekanavat · Demo ja ohjeet · Palvelin ei tallenna mitään
 
 Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).
 <!-- muutokset:loppu -->
@@ -215,4 +237,4 @@ Rakenne: `ibkr_yhteenveto/` (parserit, laskenta, Excel), `server.py` (paikalline
 Local tool that turns Interactive Brokers statements (PDF/CSV) into Finnish tax figures: bookkeeping (KPL) and
 the EVL tax bridge for a Finnish limited company, or OmaVero capital-income figures for an individual (FIFO at
 trade-date EUR rates). Runs on `127.0.0.1` with Python's standard-library HTTP server; nothing leaves your machine.
-Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Not tax advice. MIT licence.
+Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Currently aimed mainly at active traders who start the year with an empty portfolio (earlier-year lots are handled by asking the user per lot or by reading previous years' statements; exercised bought options adjust the shares' cost or sale price; written options, corporate actions and crypto are only partly supported yet); it will be improved based on feedback. Not tax advice. MIT licence.
