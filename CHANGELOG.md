@@ -8,13 +8,13 @@ keskimmäinen numero (MINOR) nousee, kun tulee uusi toiminto tai **mikä tahansa
 lukuja** — jos se on noussut, laske vanha työkirja uudelleen. Viimeinen numero (PATCH) nousee muutoksista, jotka eivät
 koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on merkitty versio, jolla luvut on laskettu.
 
-## Tulossa (dev)
+## 2026-11-08
+
+### 0.9.0 — Versionumero ([#8](https://github.com/vilpponen/IBKR-yhteenveto/pull/8))
 
 **Uutta**
-- Versionumero: näkyy sovelluksessa, Excel-työkirjassa (Asetukset ja Muistio) ja komentorivillä (`--version`).
-  Muutoslokin julkaisuihin lisätty versiot 0.1.0–0.8.0.
-
-## 2026-11-08
+- Versionumero: näkyy sovelluksen otsikossa ja alatunnisteessa, Excel-työkirjassa (Asetukset ja Muistio) ja
+  komentorivillä (`--version`). Muutoslokin aiemmille julkaisuille lisätty versiot 0.1.0–0.8.0.
 
 ### 0.8.0 — Vuoden alun positiot ja toteutetut optiot ([#7](https://github.com/vilpponen/IBKR-yhteenveto/pull/7))
 

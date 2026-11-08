@@ -212,8 +212,8 @@ noussut työkirjan laskemisen jälkeen, laskentaan on tullut muutoksia — laske
 eivät koskaan muuta lukuja.
 
 <!-- muutokset:alku -->
-* **2026-11-08** — 0.8.0 Vuoden alun positiot ja toteutetut optiot · 0.7.0 CFD-korjaus ja README-sisällysluettelo
-* **2026-11-07** — 0.6.0 Palautekanavat · 0.5.0 Demo ja ohjeet · 0.4.0 Palvelin ei tallenna mitään
+* **2026-11-08** — 0.9.0 Versionumero · 0.8.0 Vuoden alun positiot ja toteutetut optiot · 0.7.0 CFD-korjaus ja README-sisällysluettelo
+* **2026-11-07** — 0.6.0 Palautekanavat · 0.5.0 Demo ja ohjeet
 
 Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).
 <!-- muutokset:loppu -->
