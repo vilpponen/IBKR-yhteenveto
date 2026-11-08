@@ -1,9 +1,11 @@
 # Muutosloki
 
-Uusimmat ensin. Jokainen julkaisu on yhdistetty `main`-haaraan pull requestina; demo osoitteessa
-https://ibkr.arxsavonum.com päivitetään julkaisun jälkeen.
+Uusimmat ensin. Yksi otsikko päivää kohden; saman päivän julkaisut ovat sen alla. Jokainen julkaisu on yhdistetty
+`main`-haaraan pull requestina; demo osoitteessa https://ibkr.arxsavonum.com päivitetään julkaisun jälkeen.
 
-## 2026-11-08 — CFD-korjaus ja README-sisällysluettelo ([#6](https://github.com/vilpponen/IBKR-yhteenveto/pull/6))
+## 2026-11-08
+
+### CFD-korjaus ja README-sisällysluettelo ([#6](https://github.com/vilpponen/IBKR-yhteenveto/pull/6))
 
 **Korjattu**
 - Yksityishenkilö: CFD-tappioita ei enää vähennetä. CFD-voitot lasketaan kauppakohtaisesti muuksi pääomatuloksi
@@ -13,7 +15,9 @@ https://ibkr.arxsavonum.com päivitetään julkaisun jälkeen.
 **Uutta**
 - README: sisällysluettelo ja "Viimeisimmät muutokset" (5 uusinta julkaisua tästä muutoslokista).
 
-## 2026-11-07 — Palautekanavat ([#5](https://github.com/vilpponen/IBKR-yhteenveto/pull/5))
+## 2026-11-07
+
+### Palautekanavat ([#5](https://github.com/vilpponen/IBKR-yhteenveto/pull/5))
 
 **Uutta**
 - Palaute ja virheilmoitukset: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues/new/choose)
@@ -22,7 +26,7 @@ https://ibkr.arxsavonum.com päivitetään julkaisun jälkeen.
 - Tietoturvaongelmat voi ilmoittaa yksityisesti ([SECURITY.md](SECURITY.md)).
 - Tämä muutosloki.
 
-## 2026-11-07 — Demo ja ohjeet ([#4](https://github.com/vilpponen/IBKR-yhteenveto/pull/4))
+### Demo ja ohjeet ([#4](https://github.com/vilpponen/IBKR-yhteenveto/pull/4))
 
 **Uutta**
 - Demo selaimessa: https://ibkr.arxsavonum.com
@@ -32,7 +36,7 @@ https://ibkr.arxsavonum.com päivitetään julkaisun jälkeen.
 - README kertoo selvästi, mitkä raportit tarvitaan: osakeyhtiölle Activity Statement CSV riittää,
   yksityishenkilölle CSV + PDF (tarkat kauppakohtaiset EUR-määrät). Sama ohje sovelluksen latauslaatikossa.
 
-## 2026-11-07 — Palvelin ei tallenna mitään ([#3](https://github.com/vilpponen/IBKR-yhteenveto/pull/3))
+### Palvelin ei tallenna mitään ([#3](https://github.com/vilpponen/IBKR-yhteenveto/pull/3))
 
 **Muutettu**
 - Palvelin ei säilytä mitään: ei istuntoja, ei tiedostoja, ei väliaikaistiedostoja levylle, ei raporttien sisältöä
@@ -42,20 +46,20 @@ https://ibkr.arxsavonum.com päivitetään julkaisun jälkeen.
 **Korjattu**
 - Palvelimen loki kaatui tukemattomilla pyynnöillä (esim. HEAD).
 
-## 2026-11-07 — Windows-asennus ([#2](https://github.com/vilpponen/IBKR-yhteenveto/pull/2))
+### Windows-asennus ([#2](https://github.com/vilpponen/IBKR-yhteenveto/pull/2))
 
 **Uutta**
 - Asennus ja päivitys yhdellä PowerShell-komennolla (`irm … install.ps1 | iex`).
 - `run.cmd`: myöhemmin käynnistys kaksoisklikkauksella.
 - Asennuksen automaattitestit Windowsilla (PowerShell 5.1 ja 7) ja macOS:llä.
 
-## 2026-11-07 — macOS-asennus ([#1](https://github.com/vilpponen/IBKR-yhteenveto/pull/1))
+### macOS-asennus ([#1](https://github.com/vilpponen/IBKR-yhteenveto/pull/1))
 
 **Uutta**
 - Asennus ja päivitys yhdellä komennolla (`curl … install.sh | bash`) valitsemaasi kansioon.
 - Käyttöönotto-ohjeet ilman gitiä tai GitHub-tunnusta.
 
-## 2026-11-07 — Ensimmäinen versio
+### Ensimmäinen versio
 
 **Uutta**
 - **Osakeyhtiö:** kirjanpito (KPL) ilman tasauseriä, alimman arvon periaate, tase IBKR:n NAV:sta ja EVL-verolaskelma (6B).

@@ -183,11 +183,8 @@ Tietoturvaongelmat ilmoitetaan yksityisesti: katso [SECURITY.md](SECURITY.md).
 ## Viimeisimmät muutokset
 
 <!-- muutokset:alku -->
-* 2026-11-08 — CFD-korjaus ja README-sisällysluettelo
-* 2026-11-07 — Palautekanavat
-* 2026-11-07 — Demo ja ohjeet
-* 2026-11-07 — Palvelin ei tallenna mitään
-* 2026-11-07 — Windows-asennus
+* **2026-11-08** — CFD-korjaus ja README-sisällysluettelo
+* **2026-11-07** — Palautekanavat · Demo ja ohjeet · Palvelin ei tallenna mitään · Windows-asennus
 
 Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).
 <!-- muutokset:loppu -->
