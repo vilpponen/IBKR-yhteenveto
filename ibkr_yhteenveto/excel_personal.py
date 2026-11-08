@@ -11,7 +11,7 @@ from .xlsx_mem import workbook_bytes
 
 from .books import _is_div_wht, _is_pil, wht_country
 from .excel import FILL_KEY, NUM, PCT, Sheet
-from .personal import PBooks, _is_cfd_cost
+from .personal import SOURCES, PBooks, _is_cfd_cost
 
 
 def write_personal_workbook(b: PBooks) -> bytes:
@@ -24,7 +24,8 @@ def write_personal_workbook(b: PBooks) -> bytes:
 
     om = Sheet(wb, "OmaVero-kentät", [42, 58, 18, 60])
     sm = Sheet(wb, "Arvopaperit yhteenveto", [14, 16, 18, 18, 16, 16, 16, 16, 30])
-    lu = Sheet(wb, "Luovutukset (FIFO)", [14, 12, 12, 12, 16, 16, 16, 20, 8])
+    lu = Sheet(wb, "Luovutukset (FIFO)", [14, 12, 12, 12, 16, 16, 16, 30, 8])
+    va = Sheet(wb, "Vuoden alun erät", [14, 12, 16, 16, 16, 12, 12, 40]) if b.opening else None
     de = Sheet(wb, "Johdannaiset", [16, 22, 16, 16, 16, 30])
     dv = Sheet(wb, "Osingot & lähdeverot", [12, 62, 8, 14, 14, 10, 8, 22])
     kk = Sheet(wb, "Korot & kulut", [12, 58, 8, 14, 14, 30])
@@ -76,6 +77,27 @@ def write_personal_workbook(b: PBooks) -> bytes:
     rt = lu.row(["Tappiot", None, None, None, None, None, f'=SUMIF(G{r0}:G{r1},"<0")'], bold=True)
     ref["T"] = lu.q(f"G{rt}")
 
+    # ---------------------------------------------------------------- Vuoden alun erät
+    if va:
+        va.title("Vuoden alun positiot (edellisinä vuosina avatut erät)",
+                 [sub, "Tänä vuonna luovutetut erät, jotka on avattu ennen kautta, ja niiden hankintamenon peruste.",
+                  "Verohallinto: luovuttajan on pystyttävä esittämään alkuperäinen hankintahinta; muuten "
+                  "hankintameno-olettama."])
+        va.header(["Symboli", "Määrä", "Luovutushinnat €", "Hankintamenot €", "Tulos €", "Ensimmäinen myynti",
+                   "Viimeinen myynti", "Käsittely"])
+        for o in b.opening:
+            r = va.r
+            va.row([o["symbol"] + (" (short)" if o["short"] else ""), o["qty"], round(o["proceeds_eur"], 2),
+                    round(o["cost_eur"], 2), f"=C{r}-D{r}", o["first_sale"], o["last_sale"],
+                    ", ".join(SOURCES.get(k, k) for k in o["methods"])],
+                   ["in", "in", "in", "in", "f", "in", "in", "t"], fmt=[None, "#,##0.####"])
+        va.blank()
+        va.note("Käsittelytavat: Käyttäjän syöttämä = alkuperäiset ostotiedot; Edellisvuoden raportti = erä luettu "
+                "aiemman kauden IBKR-raportista; Hankintameno-olettama = 20 % (40 % jos omistettu ≥ 10 v) "
+                "luovutushinnasta; IBKR-päättely = hankintameno johdettu IBKR:n realisoidusta tuloksesta.")
+        if b.preliminary:
+            va.note("⚠ KESKENERÄINEN: osalle eristä ei ole valittu käsittelytapaa (RATKAISEMATON).")
+
     # ---------------------------------------------------------------- Arvopaperit yhteenveto
     sm.title("Arvopaperit symboleittain", [sub, "Vertailu: IBKR R&U (IBKR muuntaa voiton myyntipäivän kurssilla; Vero käyttää kahta kurssia)."])
     sm.header(["Symboli", "Luovutushinnat", "Hankintamenot", "Voitot", "Tappiot", "Netto (FIFO)", "IBKR R&U", "Ero", "Huom."])
@@ -85,7 +107,8 @@ def write_personal_workbook(b: PBooks) -> bytes:
                     f'=SUMIFS({LU["R"]},{LU["sym"]},A{sm.r},{LU["R"]},">0")',
                     f'=SUMIFS({LU["R"]},{LU["sym"]},A{sm.r},{LU["R"]},"<0")', f"=D{sm.r}+E{sm.r}",
                     b.ru_by_symbol.get(sym, 0.0), f"=F{sm.r}-G{sm.r}",
-                    "Avaava erä edellisvuodelta" if any(m.symbol == sym and m.source != "FIFO" for m in b.matches) else ""],
+                    "Vuoden alun erä: " + ", ".join(sorted({m.source for m in b.matches if m.symbol == sym and m.method != "fifo"}))
+                    if any(m.symbol == sym and m.method != "fifo" for m in b.matches) else ""],
                    ["in", "f", "f", "f", "f", "f", "in", "f", "t"])
 
     # ---------------------------------------------------------------- Johdannaiset
@@ -225,7 +248,9 @@ def write_personal_workbook(b: PBooks) -> bytes:
          "Vero vahvistaa luovutustappion (5 v); korkojen alijäämä hyvitetään ansiotulojen verosta")
 
     # ---------------------------------------------------------------- OmaVero-kentät
-    om.title("OmaVero — täytettävät tiedot", [sub, "Paljon kauppoja: ilmoita yhteenvetona ja liitä tämä työkirja erittelyksi."])
+    om.title("OmaVero — täytettävät tiedot", [sub, "Paljon kauppoja: ilmoita yhteenvetona ja liitä tämä työkirja erittelyksi."]
+             + (["⚠ KESKENERÄINEN LASKELMA: vuoden alun positioiden käsittely on valitsematta (ks. Vuoden alun erät)."]
+                if b.preliminary else []))
     om.header(["Osio", "Kenttä", "EUR", "Huom."])
     links = {
         "Osakkeet ja rahastot — luovutushinnat yhteensä": f"={ref['L']}",
@@ -264,6 +289,12 @@ def write_personal_workbook(b: PBooks) -> bytes:
     for k, t in [
         ("FIFO", "Verohallinto edellyttää, että samanlajiset arvopaperit katsotaan myydyiksi hankintajärjestyksessä (FIFO) "
                  "arvo-osuustilikohtaisesti. Tämä työkirja laskee FIFO:n itse IBKR:n kauppariveistä."),
+        ("Vuoden alun positiot", "Erät, jotka on avattu ennen laskentakautta, käsitellään käyttäjän valinnan mukaan: "
+                                 "alkuperäiset ostotiedot, aiemman kauden IBKR-raportti (erähistoria FIFO-järjestyksessä), "
+                                 "hankintameno-olettama tai IBKR:n realisoidusta tuloksesta johdettu hankintameno. "
+                                 "Peruste näkyy erittäin Luovutukset- ja Vuoden alun erät -välilehdillä. Olettamaa "
+                                 "käytettäessä luovutushintana on provisiolla vähennetty hinta (tarkennetaan tehtävässä "
+                                 "hankintameno-olettama hankintaerittäin)."),
         ("Valuuttakurssit", "Luovutushinta muunnetaan euroiksi myyntipäivän ja hankintameno ostopäivän kurssilla "
                             "(IBKR Forex P/L Details, kauppakohtaiset EUR-määrät)."),
         ("Hankintameno-olettama", "20 % (40 % jos omistettu ≥ 10 v) myyntihinnasta voidaan käyttää todellisen hankintamenon "

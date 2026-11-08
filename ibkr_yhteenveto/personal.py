@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from datetime import date
 
 from .books import _is_div_wht, _is_pil, _div_country, wht_country
 from .model import Statement
@@ -44,9 +45,23 @@ class PSettings:
     div_taxable_share: float = 0.85    # listed company dividends
     pil_taxable_share: float = 1.0     # payment in lieu (SYEP) — ordinary capital income
     credit_interest_wht: bool = False
+    # year-start positions: {symbol: {"method": "lots"|"manual"|"olettama"|"ibkr",
+    #   "lots": [{"date": "YYYY-MM-DD", "qty": n, "cost_eur": x} or {"date", "qty", "olettama": true}]}}
+    opening_choices: dict = field(default_factory=dict)
     treaty_rates: dict = field(default_factory=lambda: {"DK": 0.15, "US": 0.15, "SE": 0.15, "NO": 0.15, "DE": 0.15,
                                                         "NL": 0.15, "CH": 0.10, "GB": 0.0, "AU": 0.15, "CA": 0.15,
                                                         "FR": 0.0})
+
+
+# How the acquisition cost (or, for a short, the original sale price) of a matched lot was determined
+SOURCES = {
+    "fifo": "FIFO",
+    "history": "Edellisvuoden raportti",
+    "manual": "Käyttäjän syöttämä",
+    "olettama": "Hankintameno-olettama",
+    "ibkr": "IBKR-päättely (valittu)",
+    "unresolved": "RATKAISEMATON — IBKR-päättely",
+}
 
 
 @dataclass
@@ -58,7 +73,13 @@ class Match:
     proceeds: float      # luovutushinta EUR (net of selling commission)
     cost: float          # hankintameno EUR (incl. buying commission)
     short: bool = False
-    source: str = "FIFO"  # 'FIFO' or 'Avaava erä (IBKR)'
+    method: str = "fifo"  # key of SOURCES
+
+    @property
+    def source(self) -> str:
+        if self.method == "olettama":
+            return f"Hankintameno-olettama {round(self.cost / self.proceeds * 100) if self.proceeds else 20} %"
+        return SOURCES.get(self.method, self.method)
 
     @property
     def result(self) -> float:
@@ -76,55 +97,128 @@ class PBooks:
     wht_rows: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     ru_by_symbol: dict[str, float] = field(default_factory=dict)
+    opening: list[dict] = field(default_factory=list)    # year-start lots consumed this year + how they were handled
+    end_lots: list[dict] = field(default_factory=list)   # open lots at period end (export for next year)
+    preliminary: bool = False                             # some year-start lot has no user decision
 
 
-def fifo(st: Statement, warnings: list[str]) -> list[Match]:
+def _ten_years(buy: str, sale: str) -> bool:
+    try:
+        b, s_ = date.fromisoformat(buy[:10]), date.fromisoformat(sale[:10])
+    except ValueError:
+        return False
+    try:
+        anniv = b.replace(year=b.year + 10)
+    except ValueError:          # 29 Feb
+        anniv = b.replace(year=b.year + 10, day=28)
+    return s_ >= anniv
+
+
+def _choice_lots(sym: str, opening: float, choice: dict | None, warnings: list[str]) -> list[list]:
+    """Year-start lots for `sym` from the user's choice: [qty_signed, eur_per_share|None, date, method]."""
+    if not choice or choice.get("method") in (None, "", "unresolved"):
+        return [[opening, None, "avaava", "unresolved"]]
+    if choice.get("method") == "ibkr":
+        return [[opening, None, "avaava", "ibkr"]]
+    sign = 1.0 if opening > 0 else -1.0
+    out, left = [], abs(opening)
+    raw = choice.get("lots") or []
+    for i, lot in enumerate(raw):
+        q = abs(float(lot.get("qty") or 0)) or (left if i == len(raw) - 1 else 0.0)
+        q = min(q, left)
+        if q <= 1e-9:
+            continue
+        d = str(lot.get("date") or "")[:10]
+        if lot.get("olettama") or choice.get("method") == "olettama":
+            if sign < 0 or not d:
+                warnings.append(f"{sym}: hankintameno-olettama vaatii ostopäivän eikä sovellu lyhyeen positioon — "
+                                "erä jätetty ratkaisemattomaksi.")
+                out.append([sign * q, None, "avaava", "unresolved"])
+            else:
+                out.append([sign * q, None, d, "olettama"])
+        else:
+            cost = lot.get("cost_eur")
+            if cost in (None, "") or not d:
+                warnings.append(f"{sym}: alkuperäisestä erästä puuttuu ostopäivä tai hankintameno — erä jätetty "
+                                "ratkaisemattomaksi.")
+                out.append([sign * q, None, "avaava", "unresolved"])
+            else:
+                out.append([sign * q, abs(float(cost)) / q, d, "manual"])
+        left -= q
+    if left > 1e-6:
+        warnings.append(f"{sym}: syötetyt erät ({_fi(abs(opening) - left, 4)} kpl) eivät kata vuoden alun positiota "
+                        f"({_fi(abs(opening), 4)} kpl) — loput {_fi(left, 4)} kpl ratkaisemattomia.")
+        out.append([sign * left, None, "avaava", "unresolved"])
+    return out
+
+
+def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None) -> tuple[list[Match], list[dict]]:
+    """FIFO per symbol over history legs (earlier statements) + this period's legs.
+
+    Returns this period's disposals and the lots still open at period end. The year-start position (end holding
+    minus all known trades) is handled by the user's choice for that symbol; without one it is 'unresolved'."""
+    choices = choices or {}
     end_qty = defaultdict(float)
     for p in st.positions:
         if p.asset_class == "Stocks":
             end_qty[p.symbol] += p.quantity
+    start = st.period_start or ""
     legs_by_sym = defaultdict(list)
-    for i, x in enumerate(st.stock_legs):
+    for i, x in enumerate(list(st.history_legs) + list(st.stock_legs)):
         legs_by_sym[x["symbol"]].append((x["date"], i, x))
     out: list[Match] = []
-    for sym, legs in legs_by_sym.items():
-        legs.sort(key=lambda t: (t[0], t[1]))
+    end_lots: list[dict] = []
+    for sym in sorted(set(legs_by_sym) | {k for k, q in end_qty.items() if abs(q) > 1e-9}):
+        legs = sorted(legs_by_sym.get(sym, []), key=lambda t: (t[0], t[1]))
         opening = end_qty.get(sym, 0.0) - sum(x["qty"] for _, _, x in legs)
-        lots: deque = deque()  # [qty_signed, eur_per_share or None, date]
+        lots: deque = deque()  # [qty_signed, eur_per_share or None, date, method]
         if abs(opening) > 1e-9:
-            lots.append([opening, None, "avaava"])
-        for date, _, x in legs:
+            lots.extend(_choice_lots(sym, opening, choices.get(sym), warnings))
+        for d, _, x in legs:
             q, px = x["qty"], x["eur"] / abs(x["qty"]) if x["qty"] else 0.0
+            in_period = d >= start
             while abs(q) > 1e-9 and lots and (lots[0][0] > 0) != (q > 0):
                 lot = lots[0]
                 n = min(abs(q), abs(lot[0]))
-                if q < 0:   # selling against long lot
-                    m = Match(sym, date, lot[2], n, px * n, (lot[1] or 0.0) * n)
-                else:       # buying back a short lot
-                    m = Match(sym, date, lot[2], n, (lot[1] or 0.0) * n, px * n, short=True)
-                if lot[1] is None:
-                    m.source = "Avaava erä (IBKR)"
-                out.append(m)
+                if in_period:
+                    if q < 0:   # selling against long lot
+                        cost = (lot[1] or 0.0) * n
+                        if lot[3] == "olettama":
+                            cost = (0.4 if _ten_years(lot[2], d) else 0.2) * px * n
+                        m = Match(sym, d, lot[2], n, px * n, cost, method=lot[3])
+                    else:       # buying back a short lot
+                        m = Match(sym, d, lot[2], n, (lot[1] or 0.0) * n, px * n, short=True, method=lot[3])
+                    out.append(m)
                 lot[0] += n if lot[0] < 0 else -n
                 q += n if q < 0 else -n
                 if abs(lot[0]) < 1e-9:
                     lots.popleft()
             if abs(q) > 1e-9:
-                lots.append([q, px, date])
-    return out
+                lots.append([q, px, d, "fifo" if in_period else "history"])
+        for lot in lots:
+            known = lot[1] is not None
+            end_lots.append({"symbol": sym, "date": lot[2] if lot[2] != "avaava" else "", "qty": lot[0],
+                             "cost_eur": abs(lot[1] * lot[0]) if known else None,
+                             "olettama": lot[3] == "olettama", "method": lot[3]})
+    return out, end_lots
 
 
-def _fill_opening(matches: list[Match], ru: dict[str, float], warnings: list[str]):
-    """Opening lots (bought in an earlier year) have no EUR cost in this statement: back out their cost so the
-    symbol's total equals IBKR's realized P/L for those shares."""
+def fifo(st: Statement, warnings: list[str], choices: dict | None = None) -> list[Match]:
+    return fifo_full(st, warnings, choices)[0]
+
+
+def _ibkr_backout(matches: list[Match], ru: dict[str, float]) -> dict[str, float]:
+    """Lots without a known cost ('ibkr'/'unresolved'): back out their cost so the symbol's total equals IBKR's
+    realized P/L. Returns the backed-out cost (long) / proceeds (short) per symbol."""
     by_sym = defaultdict(list)
     for m in matches:
         by_sym[m.symbol].append(m)
+    out = {}
     for sym, ms in by_sym.items():
-        op = [m for m in ms if m.source != "FIFO"]
+        op = [m for m in ms if m.method in ("ibkr", "unresolved")]
         if not op:
             continue
-        known = sum(m.result for m in ms if m.source == "FIFO")
+        known = sum(m.result for m in ms if m.method not in ("ibkr", "unresolved"))
         target = ru.get(sym, 0.0) - known
         tot_qty = sum(m.qty for m in op)
         for m in op:
@@ -133,8 +227,46 @@ def _fill_opening(matches: list[Match], ru: dict[str, float], warnings: list[str
                 m.proceeds = m.cost + target * share
             else:
                 m.cost = m.proceeds - target * share
-        warnings.append(f"{sym}: {_fi(tot_qty, 0)} kpl myytiin edellisvuoden eristä — hankintameno johdettu IBKR:n "
-                        "realisoidusta tuloksesta. Tarkista edellisen vuoden ostokursseista.")
+        out[sym] = sum(m.proceeds if m.short else m.cost for m in op)
+    return out
+
+
+def opening_summary(matches: list[Match], backout: dict[str, float]) -> list[dict]:
+    """Year-start lots consumed this period, per symbol (for the UI step and the workbook)."""
+    agg: dict[str, dict] = {}
+    for m in matches:
+        if m.method in ("fifo", "history"):
+            continue
+        a = agg.setdefault(m.symbol, {"symbol": m.symbol, "short": m.short, "qty": 0.0, "proceeds_eur": 0.0,
+                                      "cost_eur": 0.0, "first_sale": m.sale_date, "last_sale": m.sale_date,
+                                      "methods": set()})
+        a["qty"] += m.qty
+        a["proceeds_eur"] += m.proceeds
+        a["cost_eur"] += m.cost
+        a["first_sale"], a["last_sale"] = min(a["first_sale"], m.sale_date), max(a["last_sale"], m.sale_date)
+        a["methods"].add(m.method)
+    out = []
+    for sym, a in sorted(agg.items()):
+        a["methods"] = sorted(a["methods"])
+        a["ibkr_suggestion_eur"] = backout.get(sym)
+        out.append(a)
+    return out
+
+
+def opening_lots(st: Statement) -> list[dict]:
+    """Year-start positions that this period's sales consume and that need the user's decision (no history)."""
+    ms = fifo(st, [])
+    ru = {r.symbol: r.realized for r in st.ru if r.asset_class == "Stocks"}
+    end_qty = defaultdict(float)
+    for p in st.positions:
+        if p.asset_class == "Stocks":
+            end_qty[p.symbol] += p.quantity
+    rows = opening_summary(ms, _ibkr_backout(ms, ru))
+    for r in rows:   # the whole year-start position (the user enters lots for all of it)
+        legs = [x["qty"] for x in list(st.history_legs) + list(st.stock_legs) if x["symbol"] == r["symbol"]]
+        r["opening_qty"] = end_qty.get(r["symbol"], 0.0) - sum(legs)
+        r["ccy"] = next((x["ccy"] for x in st.stock_legs if x["symbol"] == r["symbol"]), "")
+    return rows
 
 
 def build_personal(st: Statement, s: PSettings) -> PBooks:
@@ -149,8 +281,21 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
                           "käytä PDF-raporttia (Forex P/L Details).")
 
     b.ru_by_symbol = {r.symbol: r.realized for r in st.ru if r.asset_class == "Stocks"}
-    b.matches = fifo(st, b.warnings)
-    _fill_opening(b.matches, b.ru_by_symbol, b.warnings)
+    b.matches, b.end_lots = fifo_full(st, b.warnings, s.opening_choices)
+    backout = _ibkr_backout(b.matches, b.ru_by_symbol)
+    b.opening = opening_summary(b.matches, backout)
+    unresolved = [o["symbol"] for o in b.opening if "unresolved" in o["methods"]]
+    b.preliminary = bool(unresolved)
+    if unresolved:
+        b.warnings.insert(0, "KESKENERÄINEN LASKELMA: vuoden alun positioille " + ", ".join(unresolved) +
+                          " ei ole valittu käsittelytapaa — hankintameno on päätelty IBKR:n luvuista. Valitse käsittely "
+                          "(alkuperäiset tiedot, edellisen vuoden raportti, hankintameno-olettama tai IBKR:n luku).")
+    for o in b.opening:
+        if o["methods"] == ["ibkr"]:
+            b.warnings.append(f"{o['symbol']}: vuoden alun erän hankintameno IBKR:n luvuista (valittu). Verohallinto "
+                              "edellyttää alkuperäistä hankintahintaa tai hankintameno-olettamaa.")
+    if st.history_periods:
+        b.warnings.append("Erähistoria aiemmista raporteista: " + ", ".join(st.history_periods) + ".")
     M = b.matches
     v["sec_proceeds"] = sum(m.proceeds for m in M)
     v["sec_cost"] = sum(m.cost for m in M)

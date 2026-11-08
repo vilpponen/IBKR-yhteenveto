@@ -5,6 +5,14 @@ Uusimmat ensin. Yksi otsikko päivää kohden; saman päivän julkaisut ovat sen
 
 ## Tulossa (dev)
 
+**Uutta**
+- Yksityishenkilö: **vuoden alun positiot**. Jos tänä vuonna myydään aiemmin ostettuja osakkeita, sovellus kysyy
+  ennen tuloksia käsittelytavan: edellisen vuoden IBKR-raportti (luetaan automaattisesti), alkuperäiset ostotiedot,
+  hankintameno-olettama tai IBKR:n luku. Ilman valintaa tulokset merkitään keskeneräisiksi.
+- Edellisten vuosien raportit voi lisätä samaan latauslaatikkoon: niistä rakennetaan erähistoria FIFO-järjestyksessä.
+- Valintojen vienti ja tuonti (JSON) sekä vuoden lopun avoimet erät ensi vuoden laskelmaan.
+- Työkirjaan Vuoden alun erät -välilehti; jokaisen luovutuksen hankintamenon peruste näkyy erittäin.
+
 **Muutettu**
 - README: huomautus, kenelle työkalu sopii nyt (aktiivinen kaupankävijä, salkku tyhjä vuoden alussa) ja mitkä
   tilanteet ovat vielä rajallisesti tuettuja.

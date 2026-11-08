@@ -116,6 +116,9 @@ class Statement:
     stock_legs: list[dict] = field(default_factory=list)
     # realized P/L per closing CFD trade (CSV Trades): {"date","symbol","cls","ccy","pl","eur"} — eur None = unconverted
     cfd_trades: list[dict] = field(default_factory=list)
+    # stock legs from statements of EARLIER periods of the same account (lot history for year-start positions)
+    history_legs: list[dict] = field(default_factory=list)
+    history_periods: list[str] = field(default_factory=list)   # "YYYY-MM-DD – YYYY-MM-DD" per earlier period
     etf_symbols: set[str] = field(default_factory=set)  # from Financial Instrument Information (CSV)
     warnings: list[str] = field(default_factory=list)
 
@@ -153,6 +156,8 @@ class Statement:
             setattr(st, f, [CashLine(**r) for r in d.get(f, [])])
         st.stock_legs = [dict(x) for x in d.get("stock_legs", [])]
         st.cfd_trades = [dict(x) for x in d.get("cfd_trades", [])]
+        st.history_legs = [dict(x) for x in d.get("history_legs", [])]
+        st.history_periods = list(d.get("history_periods", []))
         st.etf_symbols = set(d.get("etf_symbols", []))
         st.source_files, st.warnings = list(st.source_files), list(st.warnings)
         st.change_in_nav, st.commissions_by_class = dict(st.change_in_nav), dict(st.commissions_by_class)

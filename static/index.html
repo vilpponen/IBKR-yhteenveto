@@ -47,7 +47,7 @@
   .metric .l{font-size:12px;color:var(--muted)} .metric .v{font:600 24px/1.2 var(--sans);font-variant-numeric:tabular-nums;margin-top:4px}
   .field{margin:0 0 14px} .field label{display:block;font-size:13px;margin:0 0 4px}
   .field .hint{font-size:12px;color:var(--muted);margin-top:3px}
-  input[type=text],input[type=number],select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;
+  input[type=text],input[type=number],input[type=date],select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;
     background:var(--bg);color:var(--ink);font:inherit} input:focus,select:focus{outline:2px solid var(--focus);border-color:var(--accent)}
   .check{display:flex;gap:8px;align-items:flex-start;font-size:14px;margin:0 0 10px} .check input{accent-color:var(--accent);margin-top:4px}
   details{border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:0 0 12px;background:var(--panel)}
@@ -76,6 +76,9 @@
   .spin{display:inline-block;width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;
     animation:r .8s linear infinite;vertical-align:-3px;margin-right:10px} @keyframes r{to{transform:rotate(360deg)}}
   .hidden{display:none!important}
+  #opening table td{vertical-align:middle} #opening td input,#opening td select{padding:6px 8px;font-size:13px;min-width:120px}
+  #opening .lotin{display:flex;gap:6px;flex-wrap:wrap} #opening .lotin input{width:auto;flex:1}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
   footer{margin-top:36px;color:var(--muted);font-size:12px}
   header a,footer a{color:var(--accent);text-decoration:none} header a:hover,footer a:hover{text-decoration:underline}
   .repo{float:right;font-size:13px;margin-top:10px}
@@ -151,8 +154,11 @@
       </div>
     </div>
 
+    <div id="opening" class="hidden" style="margin-top:22px"></div>
+
     <div id="err1" class="note err hidden"></div>
-    <div class="bar"><button id="go" class="btn primary" disabled>Laske tulokset →</button></div>
+    <div class="bar"><button id="go2" class="btn hidden">Laske silti (keskeneräinen)</button>
+      <button id="go" class="btn primary" disabled>Laske tulokset →</button></div>
   </section>
 
   <!-- ============================ STEP 2 ============================ -->
@@ -164,6 +170,7 @@
     <div id="okbox"></div>
     <div id="warns"></div>
     <button id="dl" class="btn primary" style="margin:6px 0 4px"></button>
+    <button id="dlLots" class="btn hidden" style="margin:6px 0 4px">⬇ Vuoden lopun erät (JSON, ensi vuodelle)</button>
     <div id="sections"></div>
     <div id="tabs" class="tabs"></div>
     <div id="tabbody"></div>
@@ -184,6 +191,8 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;
 // Everything stays in this page: the files, the parsed statement and the workbook. The server keeps nothing
 // between requests; reloading the page discards it all.
 let files = [], recog = null, stmt = null, result = null;
+// Year-start positions: the user's decision per symbol (kept in page memory only, never in localStorage)
+let choices = {}, choicesKey = "";
 
 // ---------- persist settings (convenience only; never statement data)
 const FIELDS = ["name","share_cat","ftt","wd_open","ug_open","cf","etfs","loss_cf"];
@@ -242,20 +251,114 @@ async function removeFile(name){
 function renderChips(){
   $("#chips").innerHTML = files.map(f => `<span class="chip">${esc(f.name)}<button title="Poista" data-n="${esc(f.name)}">×</button></span>`).join("");
   $("#chips").querySelectorAll("button").forEach(b => b.onclick = () => removeFile(b.dataset.n));
-  $("#go").disabled = !files.length || !stmt;
+  updateGo();
+}
+const openingLots = () => (mode() === "personal" && recog && recog.opening_lots) || [];
+function resolved(sym){
+  const c = choices[sym]; if(!c || !c.method) return false;
+  if(c.method === "ibkr" || c.method === "imported") return true;
+  if(c.method === "manual") return !!c.date && c.cost !== "" && c.cost !== undefined && !isNaN(+c.cost);
+  if(c.method === "olettama") return !!c.date;
+  return false;
+}
+function updateGo(){
+  const ready = files.length && stmt, open = openingLots().filter(o => !resolved(o.symbol)).length;
+  $("#go").disabled = !ready || open > 0;
+  $("#go2").classList.toggle("hidden", !ready || open === 0);
+}
+function renderOpening(){
+  const box = $("#opening"), lots = openingLots();
+  if(!lots.length){ box.classList.add("hidden"); box.innerHTML = ""; updateGo(); return; }
+  const n = lots.filter(o => !resolved(o.symbol)).length;
+  const rows = lots.map(o => {
+    const c = choices[o.symbol] || {}, q = Math.abs(o.opening_qty), sh = o.short;
+    const opt = (v, t) => `<option value="${v}" ${c.method===v?"selected":""}>${t}</option>`;
+    let inputs = "";
+    if(c.method === "manual") inputs = `<div class="lotin"><input type="date" data-s="${esc(o.symbol)}" data-k="date" value="${esc(c.date||"")}" title="Ostopäivä">
+        <input type="number" step="0.01" min="0" placeholder="${sh ? "Myyntihinta €" : "Hankintameno €"} (${eur0.format(q)} kpl)" data-s="${esc(o.symbol)}" data-k="cost" value="${esc(c.cost??"")}"></div>`;
+    else if(c.method === "olettama") inputs = `<div class="lotin"><input type="date" data-s="${esc(o.symbol)}" data-k="date" value="${esc(c.date||"")}" title="Ostopäivä (10 vuoden raja)"></div>`;
+    else if(c.method === "imported") inputs = `<span class="muted">${c.lots.length} erää tuotu tiedostosta</span>`;
+    else if(c.method === "ibkr") inputs = `<span class="muted">${o.ibkr_suggestion_eur == null ? "" : eur.format(o.ibkr_suggestion_eur) + " € — merkitään työkirjaan"}</span>`;
+    return `<tr><td><b>${esc(o.symbol)}</b>${sh ? " (short)" : ""}</td><td class="n">${eur0.format(q)}</td><td class="n">${eur0.format(o.qty)}</td>
+      <td class="n">${eur.format(o.proceeds_eur)}</td><td class="n">${o.ibkr_suggestion_eur == null ? "–" : eur.format(o.ibkr_suggestion_eur)}</td>
+      <td><select data-s="${esc(o.symbol)}" data-k="method">${opt("","— valitse —")}${opt("manual", sh ? "Alkuperäinen myyntihinta" : "Alkuperäiset ostotiedot")}
+        ${sh ? "" : opt("olettama","Hankintameno-olettama")}${opt("ibkr","IBKR:n luku")}${c.method==="imported" ? opt("imported","Tuodut erät") : ""}</select></td>
+      <td>${inputs}</td></tr>`;
+  }).join("");
+  box.innerHTML = `<h2>Vuoden alun positiot</h2>
+    <div class="caption">Näitä eriä myytiin tänä vuonna, mutta ne on ostettu ennen raportin kautta, joten hankintameno puuttuu.
+      Valitse jokaiselle käsittely ennen tuloksia. Verohallinto edellyttää alkuperäistä hankintahintaa tai hankintameno-olettamaa.</div>
+    <div class="note info">Helpoin tapa: <b>lisää edellisen vuoden IBKR-raportti (CSV + PDF) latauslaatikkoon</b> — erät luetaan siitä
+      automaattisesti. Myös useamman vuoden raportit käyvät.</div>
+    <div class="tablewrap"><table><thead><tr><th>Symboli</th><th class="n">Määrä 1.1.</th><th class="n">Myyty nyt</th>
+      <th class="n">Luovutushinnat €</th><th class="n">IBKR:n mukaan €</th><th>Käsittely</th><th>Tiedot</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="row"><span class="muted"><b id="opn">${n ? `${n} erää odottaa valintaa.` : "Kaikki erät käsitelty."}</b>
+      Olettama: 20 % luovutushinnasta (40 %, jos omistettu ≥ 10 v). Useita ostoeriä samasta osakkeesta: tuo JSON-tiedosto.</span></div>
+    <div class="row"><button class="btn" id="impLots">Tuo erät (JSON)</button><button class="btn" id="expCh">Vie valinnat (JSON)</button>
+      <input id="impFile" type="file" accept=".json,application/json" hidden></div>`;
+  box.classList.remove("hidden");
+  box.querySelectorAll("[data-s]").forEach(el => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
+    const c = choices[el.dataset.s] = choices[el.dataset.s] || {};
+    c[el.dataset.k] = el.value;
+    if(el.dataset.k === "method") renderOpening(); else updateGo();
+    const left = openingLots().filter(o => !resolved(o.symbol)).length;
+    $("#opn").textContent = left ? `${left} erää odottaa valintaa.` : "Kaikki erät käsitelty.";
+  }));
+  $("#impLots").onclick = () => $("#impFile").click();
+  $("#impFile").onchange = async e => { const f = e.target.files[0]; e.target.value = ""; if(f) importLots(await f.text()); };
+  $("#expCh").onclick = () => saveJson({version: 1, account: recog.account, as_of: recog.period_start, choices: openingChoices()},
+                                       `vuoden_alun_erat_${recog.period_start}.json`);
+  updateGo();
+}
+function importLots(text){
+  showErr("");
+  try{
+    const j = JSON.parse(text), ch = j.choices || {};
+    if(j.account && recog && j.account !== recog.account) showErr(`Huom: tiedosto on tililtä ${j.account}, raportti tililtä ${recog.account}.`);
+    let n = 0;
+    for(const o of openingLots()){
+      const c = ch[o.symbol]; if(!c) continue;
+      if(c.method === "ibkr") choices[o.symbol] = {method: "ibkr"};
+      else if(Array.isArray(c.lots) && c.lots.length) choices[o.symbol] = {method: "imported", lots: c.lots};
+      else continue;
+      n++;
+    }
+    if(!n) showErr("Tiedostosta ei löytynyt eriä näille osakkeille.");
+    renderOpening();
+  }catch(e){ showErr("JSON-tiedostoa ei voitu lukea: " + e.message); }
+}
+function openingChoices(){
+  const out = {};
+  for(const o of openingLots()){
+    const c = choices[o.symbol]; if(!resolved(o.symbol)) continue;
+    const q = Math.abs(o.opening_qty);
+    if(c.method === "ibkr") out[o.symbol] = {method: "ibkr"};
+    else if(c.method === "imported") out[o.symbol] = {method: "lots", lots: c.lots};
+    else if(c.method === "manual") out[o.symbol] = {method: "lots", lots: [{date: c.date, qty: q, cost_eur: +c.cost}]};
+    else if(c.method === "olettama") out[o.symbol] = {method: "lots", lots: [{date: c.date, qty: q, olettama: true}]};
+  }
+  return out;
+}
+function saveJson(obj, name){
+  const url = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], {type: "application/json"}));
+  const a = Object.assign(document.createElement("a"), {href: url, download: name});
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 async function analyze(){
   busy(true); stmt = null; renderChips();
   try{ const prev = recog;
     const j = await api("/api/analyze", {files: await Promise.all(files.map(async f => ({name: f.name, data: await toBase64(f)})))});
-    recog = j.recognised; stmt = j.statement; renderChips();
+    recog = j.recognised; stmt = j.statement;
+    const key = recog.account + "|" + recog.period_end;
+    if(key !== choicesKey){ choices = {}; choicesKey = key; }
+    renderChips();
     if(!$("#name").value || (prev && prev.account !== recog.account && $("#name").value === prev.name)) $("#name").value = recog.name || "";
     renderRecog(); }
   finally{ busy(false); }
 }
 function renderRecog(){
   const box = $("#recog");
-  if(!recog){ box.classList.add("hidden"); return; }
+  if(!recog){ box.classList.add("hidden"); renderOpening(); return; }
   const m = mode(), r = recog;
   let warn = "";
   if(r.customer_type && r.is_corporate === (m === "personal"))
@@ -274,8 +377,10 @@ function renderRecog(){
       <div class="metric"><div class="l">Nettosiirrot</div><div class="v">${eur0.format(r.net_deposits)} €</div></div>
     </div>
     ${m === "personal" ? `<div class="muted">Osakekauppoja EUR-määrineen: ${eur0.format(r.stock_legs)} riviä (FIFO-laskentaan).</div>` : ""}
+    ${m === "personal" && r.history_periods && r.history_periods.length ? `<div class="muted">Erähistoria aiemmista raporteista: ${r.history_periods.map(esc).join(", ")}</div>` : ""}
     ${warn}`;
   box.classList.remove("hidden");
+  renderOpening();
 }
 $("#ftt").addEventListener("input", renderRecog);
 
@@ -284,15 +389,28 @@ function settings(){
   const m = mode(), o = {name: $("#name").value};
   if(m === "company") Object.assign(o, {share_cat: $("#share_cat").value, ftt: $("#ftt").value, wd_open: $("#wd_open").value,
     ug_open: $("#ug_open").value, cf: $("#cf").value, etfs: $("#etfs").value, int_credit: $("#int_credit_c").checked});
-  else Object.assign(o, {loss_cf: $("#loss_cf").value, include_fx: $("#include_fx").checked, int_credit: $("#int_credit_p").checked});
+  else Object.assign(o, {loss_cf: $("#loss_cf").value, include_fx: $("#include_fx").checked, int_credit: $("#int_credit_p").checked,
+    opening_choices: openingChoices()});
   return o;
 }
+$("#go2").onclick = () => $("#go").onclick(true);
 $("#go").onclick = async () => {
   showErr(""); busy(true, "Lasketaan…");
   try{ result = await api("/api/compute", {mode: mode(), settings: settings(), statement: stmt}); renderResult(); step(2); }
   catch(e){ showErr(e.message); } finally{ busy(false); }
 };
 $("#back").onclick = () => step(1);
+$("#dlLots").onclick = () => {   // open lots at year end -> next year's year-start choices (same format as the import)
+  const ch = {}, missing = [];
+  for(const l of result.end_lots.lots){
+    if(l.cost_eur == null && !l.olettama){ missing.push(l.symbol); continue; }
+    const c = ch[l.symbol] = ch[l.symbol] || {method: "lots", lots: []};
+    c.lots.push(l.olettama ? {date: l.date, qty: Math.abs(l.qty), olettama: true}
+                           : {date: l.date, qty: Math.abs(l.qty), cost_eur: Math.round(l.cost_eur * 100) / 100});
+  }
+  saveJson({version: 1, account: result.end_lots.account, as_of: result.end_lots.as_of, choices: ch,
+            missing_cost: [...new Set(missing)]}, `vuoden_lopun_erat_${result.end_lots.as_of}.json`);
+};
 $("#dl").onclick = () => {   // workbook arrived with the result; save it from page memory
   const bin = atob(result.xlsx), b = new Uint8Array(bin.length);
   for(let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
@@ -320,7 +438,10 @@ function renderResult(){
   const r = result;
   $("#heading").textContent = r.heading; $("#caption").textContent = r.caption;
   $("#metrics").innerHTML = r.metrics.map(([l,v]) => `<div class="metric"><div class="l">${esc(l)}</div><div class="v">${eur0.format(v)} €</div></div>`).join("");
-  $("#okbox").innerHTML = r.ok === null ? "" : `<div class="note ${r.ok?"ok":"err"}">${esc(r.ok_text)}</div>`;
+  $("#okbox").innerHTML = (r.preliminary ? `<div class="note err"><b>Keskeneräinen laskelma.</b> Osalle vuoden alun positioista ei ole valittu käsittelyä — palaa asetuksiin ja valitse.</div>` : "") +
+    (r.ok === null ? "" : `<div class="note ${r.ok?"ok":"err"}">${esc(r.ok_text)}</div>`);
+  const el = r.end_lots && r.end_lots.lots ? r.end_lots.lots : [];
+  $("#dlLots").classList.toggle("hidden", !el.length);
   $("#warns").innerHTML = r.warnings.map(w => `<div class="note warn">${esc(w)}</div>`).join("");
   $("#dl").textContent = "⬇ " + r.download_label;
   $("#sections").innerHTML = r.sections.length
