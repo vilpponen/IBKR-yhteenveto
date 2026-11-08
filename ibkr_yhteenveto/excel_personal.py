@@ -11,7 +11,7 @@ from .xlsx_mem import workbook_bytes
 
 from .books import _is_div_wht, _is_pil, wht_country
 from .excel import FILL_KEY, NUM, PCT, Sheet
-from .personal import PBooks
+from .personal import PBooks, _is_cfd_cost
 
 
 def write_personal_workbook(b: PBooks) -> bytes:
@@ -89,7 +89,9 @@ def write_personal_workbook(b: PBooks) -> bytes:
                    ["in", "f", "f", "f", "f", "f", "in", "f", "t"])
 
     # ---------------------------------------------------------------- Johdannaiset
-    de.title("Johdannaiset (futuurit, optiot, CFD:t)", [sub, "Lähde: IBKR Realized & Unrealized Performance Summary (realisoidut, EUR)."])
+    de.title("Johdannaiset", [sub, "Futuurit ja optiot: IBKR Realized & Unrealized Performance Summary (realisoidut, EUR).",
+                                  "CFD:t erikseen alla: muuta pääomatuloa, tappiot vähennyskelvottomia."])
+    de.section("FUTUURIT JA OPTIOT (luovutusvoitot ja -tappiot, 9A)", 6)
     de.header(["Luokka", "Symboli", "Voitot", "Tappiot", "Netto", "Huom."])
     r0 = de.r
     for r_ in b.derivatives:
@@ -108,6 +110,21 @@ def write_personal_workbook(b: PBooks) -> bytes:
         ref.update(FXG=de.q(f"C{r}") if s.include_fx else "0", FXL=de.q(f"D{r}") if s.include_fx else "0")
     else:
         ref.update(FXG="0", FXL="0")
+    de.blank()
+    de.section("CFD:T (muu pääomatulo, 16B) — voitot kauppakohtaisesti, tappioita ei huomioida", 6)
+    de.header(["Päivä", "Symboli", "Tulos €", "Luokka", None, "Lähde"])
+    r0 = de.r
+    for x in b.cfd_rows:
+        de.row([x["date"], x["symbol"], round(x["eur"], 2), x["cls"], None, x["source"]], ["in", "in", "in", "in", None, "t"])
+    r1 = max(de.r - 1, r0)
+    rt = de.row(["Voitot (veronalainen muu pääomatulo)", None, f'=SUMIF(C{r0}:C{r1},">0")' if b.cfd_rows else 0],
+                bold=True, total=True)
+    ref["CFG"] = de.q(f"C{rt}")
+    rt = de.row(["Tappiot (vähennyskelvottomia, ei huomioida)", None, f'=SUMIF(C{r0}:C{r1},"<0")' if b.cfd_rows else 0],
+                bold=True)
+    ref["CFL"] = de.q(f"C{rt}")
+    de.note("Verohallinto: CFD-hinnanerosopimuksiin ei sovelleta luovutusvoittosäännöksiä; voitto on pääomatuloa ja tappiota "
+            "ei voi vähentää. Kukin kauppa arvioidaan erikseen. IBKR:n CFD-provisioita ei ole vähennetty voitoista.")
 
     # ---------------------------------------------------------------- Osingot & lähdeverot
     dv.title("Osingot, payment in lieu ja lähdeverot", sub)
@@ -148,20 +165,25 @@ def write_personal_workbook(b: PBooks) -> bytes:
     kk.title("Korot ja kulut", sub)
     kk.header(["Päivä", "Kuvaus", "Val.", "Määrä", "EUR", "Käsittely"])
     r0 = kk.r
+    CFDC = "CFD-kulu (ei vähennyskelpoinen)"
     for x in st.interest:
         kk.row([x.date, x.description, x.currency, x.amount, x.amount_eur,
-                "Korkotulo" if x.amount_eur > 0 else "Korko tulonhankkimisvelasta"], ["in", "in", "in", "in", "in", "t"])
+                "Korkotulo" if x.amount_eur > 0 else CFDC if _is_cfd_cost(x.description) else "Korko tulonhankkimisvelasta"],
+               ["in", "in", "in", "in", "in", "t"])
     r1 = max(kk.r - 1, r0)
-    rt = kk.row(["Korkotulot", None, None, None, f'=SUMIF(E{r0}:E{r1},">0")'], bold=True)
+    rt = kk.row(["Korkotulot", None, None, None, f'=SUMIF(F{r0}:F{r1},"Korkotulo",E{r0}:E{r1})'], bold=True)
     ref["ii"] = kk.q(f"E{rt}")
-    rt = kk.row(["Korkokulut (vähennys)", None, None, None, f'=-SUMIF(E{r0}:E{r1},"<0")'], bold=True)
+    rt = kk.row(["Korkokulut (vähennys)", None, None, None, f'=-SUMIF(F{r0}:F{r1},"Korko tulonhankkimisvelasta",E{r0}:E{r1})'],
+                bold=True)
     ref["ie"] = kk.q(f"E{rt}")
     kk.blank()
     r0 = kk.r
     for x in st.fees:
-        kk.row([x.date, x.description, x.currency, x.amount, x.amount_eur, "Tulonhankkimismeno"], ["in", "in", "in", "in", "in", "t"])
+        kk.row([x.date, x.description, x.currency, x.amount, x.amount_eur,
+                CFDC if _is_cfd_cost(x.description) else "Tulonhankkimismeno"], ["in", "in", "in", "in", "in", "t"])
     r1 = max(kk.r - 1, r0)
-    rt = kk.row(["Muut tulonhankkimismenot", None, None, None, f"=-SUM(E{r0}:E{r1})" if st.fees else 0], bold=True, total=True)
+    rt = kk.row(["Muut tulonhankkimismenot", None, None, None,
+                 f'=-SUMIF(F{r0}:F{r1},"Tulonhankkimismeno",E{r0}:E{r1})' if st.fees else 0], bold=True, total=True)
     ref["fees"] = kk.q(f"E{rt}")
 
     # ---------------------------------------------------------------- Pääomatulo & vero
@@ -185,17 +207,20 @@ def write_personal_workbook(b: PBooks) -> bytes:
     d1 = prow("Osingot × veronalainen osuus", f"={ref['div']}*{ref['divsh']}", "85 % listatuista yhtiöistä")
     d2 = prow("Payment in lieu × veronalainen osuus", f"={ref['pil']}*{ref['pilsh']}")
     d3 = prow("Korkotulot", f"={ref['ii']}", "", "link")
+    d4 = prow("CFD-voitot (voitolliset kaupat)", f"={ref['CFG']}", "Johdannaiset — tappioita ei vähennetä", "link")
     po.section("VÄHENNYKSET", 3)
     k1 = prow("Korot tulonhankkimisvelasta", f"=-{ref['ie']}", "", "link")
     k2 = prow("Muut tulonhankkimismenot", f"=-{ref['fees']}", "", "link")
-    cf = prow("Aiempien vuosien luovutustappiot", f"=-MIN({ref['cf']},MAX(0,{dn}+{d1}+{d2}+{d3}))", "Asetukset")
-    pi = prow("PÄÄOMATULO (IBKR-osuus)", f"={dn}+{d1}+{d2}+{d3}+{k1}+{k2}+{cf}", bold=True, total=True, key="po")
+    cf = prow("Aiempien vuosien luovutustappiot", f"=-MIN({ref['cf']},MAX(0,{dn}+{d1}+{d2}+{d3}+{d4}))", "Asetukset")
+    pi = prow("PÄÄOMATULO (IBKR-osuus)", f"={dn}+{d1}+{d2}+{d3}+{d4}+{k1}+{k2}+{cf}", bold=True, total=True, key="po")
     po.ws.cell(int(pi[1:]), 2).fill = FILL_KEY
     tg = prow("Pääomatulovero", f"=MIN(MAX({pi},0),{ref['br']})*{ref['r1']}+MAX({pi}-{ref['br']},0)*{ref['r2']}",
               "30 % / 34 %", key="tg")
     tc = prow("− Ulkomaisen veron hyvitys", f"=-MIN({ref['credit']},{tg})", "Osingot & lähdeverot", "link", key="tc")
     prow("Vero netto (arvio)", f"={tg}+{tc}", bold=True, total=True, key="tn")
     prow("Lähdevaltioista palautettavissa", f"={ref['reclaim']}", "DK: SKAT · IE: Revenue", "link")
+    if b.cfd_rows:
+        prow("Tieto: CFD-tappiot, joita ei huomioida (ei mukana yllä)", f"={ref['CFL']}", "Verohallinto: vähennyskelvottomia", "link")
     prow("Negatiivinen tulos → vahvistettava tappio / alijäämähyvitys", f"=IF({pi}<0,-{pi},0)",
          "Vero vahvistaa luovutustappion (5 v); korkojen alijäämä hyvitetään ansiotulojen verosta")
 
@@ -207,8 +232,10 @@ def write_personal_workbook(b: PBooks) -> bytes:
         "Osakkeet ja rahastot — hankintamenot ja kulut yhteensä": f"={ref['H']}",
         "Osakkeet ja rahastot — luovutusvoitot yhteensä": f"={ref['G']}",
         "Osakkeet ja rahastot — luovutustappiot yhteensä": f"=-{ref['T']}",
-        "Johdannaiset (futuurit, optiot, CFD) — voitot": f"={ref['DG']}",
-        "Johdannaiset (futuurit, optiot, CFD) — tappiot": f"=-{ref['DL']}",
+        "Johdannaiset (futuurit, optiot) — voitot": f"={ref['DG']}",
+        "Johdannaiset (futuurit, optiot) — tappiot": f"=-{ref['DL']}",
+        "Muut pääomatulot — CFD-voitot": f"={ref['CFG']}",
+        "Vähennyskelvottomat CFD-tappiot (ei huomioida)": f"=-{ref['CFL']}",
         "Korot tulonhankkimisvelasta (marginaalilaina)": f"={ref['ie']}",
         "Muut tulonhankkimismenot (IBKR-kulut)": f"={ref['fees']}",
     }
@@ -241,8 +268,14 @@ def write_personal_workbook(b: PBooks) -> bytes:
                             "(IBKR Forex P/L Details, kauppakohtaiset EUR-määrät)."),
         ("Hankintameno-olettama", "20 % (40 % jos omistettu ≥ 10 v) myyntihinnasta voidaan käyttää todellisen hankintamenon "
                                   "sijaan, jos se on suurempi — kannattaa vain suurivoittoisissa, pitkään pidetyissä erissä."),
-        ("Johdannaiset", "Futuurit, optiot ja CFD:t: voitot ja tappiot IBKR:n realisoiduista tuloksista. Tappiot vähennetään "
+        ("Johdannaiset", "Futuurit ja optiot: voitot ja tappiot IBKR:n realisoiduista tuloksista. Tappiot vähennetään "
                          "luovutusvoitoista ja muista pääomatuloista (5 v)."),
+        ("CFD:t", "Verohallinto: CFD-hinnanerosopimuksiin ei sovelleta luovutusvoittoverotuksen säännöksiä. Voitto on "
+                  "pääomatuloa (OmaVero: muut pääomatulot), tappiota ei huomioida verotuksessa millään tavalla, ja jokainen "
+                  "kauppa arvioidaan erikseen. Laskelma: kunkin sulkevan kaupan IBKR:n realisoitu tulos (CSV Trades, EUR "
+                  "luokan provisiosuhteella); voitolliset kaupat veronalaisia, tappiolliset jätetään huomiotta. Ei "
+                  "hankintameno-olettamaa eikä pienten luovutusten vapautusta. IBKR:n CFD-provisioita ja CFD-rahoituskuluja "
+                  "ei vähennetä (varovainen tulkinta — tarkista tarvittaessa Verohallinnolta)."),
         ("Valuutat", "IBKR:n Forex-riviä ei oletuksena oteta mukaan: EUR-perusvaluuttatilillä sen vaikutus sisältyy jo "
                      "osakkeiden EUR-määräisiin luovutushintoihin ja hankintamenoihin."),
         ("Osingot", "Listattujen yhtiöiden osingoista 85 % on veronalaista pääomatuloa. Lähdevero hyvitetään sopimusrajaan asti; "

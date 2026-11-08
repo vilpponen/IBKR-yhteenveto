@@ -3,6 +3,13 @@
 Uusimmat ensin. Jokainen julkaisu on yhdistetty `main`-haaraan pull requestina; demo osoitteessa
 https://ibkr.arxsavonum.com päivitetään julkaisun jälkeen.
 
+## Tulossa (dev)
+
+**Korjattu**
+- Yksityishenkilö: CFD-tappioita ei enää vähennetä. CFD-voitot lasketaan kauppakohtaisesti muuksi pääomatuloksi
+  (OmaVero 16B), tappiollisia kauppoja ei huomioida (Verohallinto). CFD:iin liittyviä rahoituskuluja ei vähennetä.
+  Osakeyhtiön laskelma ei muutu; muistio pyytää vahvistamaan CFD:iden käsittelyn kirjanpitäjältä.
+
 ## 2026-11-07 — Palautekanavat
 
 **Uutta**

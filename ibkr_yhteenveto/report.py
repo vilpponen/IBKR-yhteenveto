@@ -134,7 +134,8 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
                 ["Johdannaisten voitot − tappiot", v["der_gains"] + v["der_losses"]],
                 ["Valuutat", v["fx_gains"] + v["fx_losses"]],
                 ["Osingot × 85 %", v["div_taxable"]], ["Payment in lieu", v["pil_taxable"]],
-                ["Korkotulot", v["int_income"]], ["− Korot tulonhankkimisvelasta", -v["int_expense"]],
+                ["Korkotulot", v["int_income"]], ["CFD-voitot (muu pääomatulo)", v["cfd_gains"]],
+                ["− Korot tulonhankkimisvelasta", -v["int_expense"]],
                 ["− Muut tulonhankkimismenot", -v["fees"]], ["− Aiempien vuosien tappiot", -v["cf_used"]],
                 ["PÄÄOMATULO", v["capital_income"]], ["Vero (30 % / 34 %)", v["tax_gross"]],
                 ["− Ulkomaisen veron hyvitys", -v["tax_credit"]], ["VERO NETTO (arvio)", v["tax_net"]]], [1]),
@@ -143,10 +144,19 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
                 [[k, *x, x[2] + x[3], pb.ru_by_symbol.get(k, 0.0)] for k, x in sorted(agg.items())], [1, 2, 3, 4, 5, 6]),
             "Johdannaiset": _t(["Luokka", "Symboli", "Voitot", "Tappiot", "Netto"],
                                [[r.asset_class, r.symbol, r.profit, r.loss, r.realized] for r in pb.derivatives], [2, 3, 4]),
+            "CFD:t": _t(["Päivä", "Symboli", "Tulos", "Käsittely"],
+                        [[x["date"], x["symbol"], x["eur"],
+                          "Veronalainen (muu pääomatulo)" if x["eur"] > 0 else "Ei huomioida (vähennyskelvoton)"]
+                         for x in pb.cfd_rows]
+                        + ([["", "Voitot yhteensä", v["cfd_gains"], "Veronalainen"],
+                            ["", "Tappiot yhteensä", v["cfd_losses_ignored"], "Ei huomioida"]] if pb.cfd_rows else []),
+                        [2]),
             "Lähdeverot": _t(["Maa", "Tulolaji", "Brutto", "Lähdevero", "Hyvitys", "Palautettava"],
                              [[w["country"], w["type"], w["gross"], w["wht"], w["credit"], w["reclaim"]]
                               for w in pb.wht_rows], [2, 3, 4, 5]),
         },
         "notes": ["Arvio IBKR-tilin osuudesta. Lopullinen vero lasketaan OmaVerossa kaikista tuloistasi."],
     }
+    if not pb.cfd_rows:
+        del res["tabs"]["CFD:t"]
     return res, write_personal_workbook(pb)
