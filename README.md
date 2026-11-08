@@ -24,7 +24,7 @@ palvelimella muiden käyttöön; silloin sivu kertoo käyttäjälle, että rapor
 > ⚠️ **Ei veroneuvontaa.** Työkalu tekee laskelman ja näyttää perusteet, mutta tulkinnat (esim. omaisuuslaji,
 > lähdeverojen hyvitys) kannattaa vahvistaa kirjanpitäjältä tai Verohallinnosta. Säännöt: verovuodet 2025–2026.
 
-**Sisällys**
+**Sisällysluettelo**
 
 * [Käyttöönotto](#käyttöönotto)
 * [Mitkä raportit IBKR:stä](#mitkä-raportit-ibkrstä)
