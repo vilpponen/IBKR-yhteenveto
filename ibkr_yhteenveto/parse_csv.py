@@ -11,7 +11,7 @@ import io
 from pathlib import Path
 
 from .model import CashLine, ForexBalance, NavRow, Position, RURow, Statement
-from .parse_common import CFD_CLASSES, convert_groups, finalize_positions, parse_period, to_num
+from .parse_common import CFD_CLASSES, NON_FIFO_CODES, OPTION_CLASSES, codes, convert_groups, finalize_positions, parse_period, to_num
 
 CASH_MAP = {
     "Interest": "interest", "Fees": "fees", "Withholding Tax": "withholding",
@@ -147,7 +147,8 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
         if kind != "Data" or d.get("Asset Category") != "Stocks" or d.get("DataDiscriminator", "Order") not in ("Order", "Trade"):
             continue
         q, ccy = to_num(d.get("Quantity")), d.get("Currency", "")
-        amt = abs(to_num(d.get("Proceeds")) + (to_num(d.get("Comm/Fee")) if q < 0 else -to_num(d.get("Comm/Fee"))))
+        # IBKR Comm/Fee is negative: buy cost = |proceeds + comm| (more), sale price = proceeds + comm (less)
+        amt = abs(to_num(d.get("Proceeds")) + to_num(d.get("Comm/Fee")))
         if ccy == base:
             st.stock_legs.append({"date": (d.get("Date/Time") or "")[:10], "symbol": d.get("Symbol", ""), "qty": q,
                                   "ccy": ccy, "eur": amt, "exact": True})
@@ -156,6 +157,23 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
                                   "ccy": ccy, "eur": amt * abs(ratio[ccy]), "exact": False})
 
     st.cfd_trades = _cfd_trades(rows.get("Trades", []), base)
+    info = {(d.get("Symbol") or "").strip(): d for d in data("Financial Instrument Information")
+            if (d.get("Asset Category") or "").strip() in OPTION_CLASSES}
+    st.option_trades = _option_trades(rows.get("Trades", []), base, info)
+    for kind, d in rows.get("Trades", []):
+        if kind != "Data" or d.get("Asset Category") != "Stocks":
+            continue
+        cs = codes(d.get("Code"))
+        if cs & {"Ex", "A"}:
+            st.exercise_rows.append({"date": (d.get("Date/Time") or "")[:10], "symbol": d.get("Symbol", ""),
+                                     "qty": to_num(d.get("Quantity")), "basis": to_num(d.get("Basis")),
+                                     "cash": to_num(d.get("Proceeds")), "ccy": d.get("Currency", ""),
+                                     "code": d.get("Code", "")})
+        if cs & NON_FIFO_CODES and not any("FIFO" in w for w in st.warnings):
+            st.warnings.append("IBKR on käyttänyt joissakin kaupoissa muuta erätäsmäytystä kuin FIFO:a (koodi "
+                               + ", ".join(sorted(cs & NON_FIFO_CODES)) + "). Verohallinto edellyttää FIFO-järjestystä; "
+                               "tämä laskelma käyttää FIFO:a, joten tulos voi poiketa IBKR:n luvuista.")
+
 
     # ---- Cash sections
     for sec, attr in CASH_MAP.items():
@@ -248,4 +266,53 @@ def _cfd_trades(trades: list[tuple[str, dict]], base: str) -> list[dict]:
             x["eur"] = x["pl"]
         elif (x["cls"], x["ccy"]) in ratio:
             x["eur"] = x["pl"] * ratio[(x["cls"], x["ccy"])]
+    return out
+
+
+def _class_ratio(trades: list[tuple[str, dict]], classes: set[str], base: str) -> dict[tuple[str, str], float]:
+    """Base-currency conversion per (class, currency) from the commission Total rows (see _cfd_trades)."""
+    native, conv = {}, {}
+    for kind, d in trades:
+        cls = d.get("Asset Category", "")
+        if cls in classes and kind == "Total":
+            ccy = d.get("Currency", "")
+            if ccy == base:
+                conv.setdefault(cls, []).append(to_num(d.get("Comm/Fee")))
+            else:
+                native.setdefault(cls, {})[ccy] = to_num(d.get("Comm/Fee"))
+    out = {}
+    for cls, by_ccy in native.items():
+        base_tot = conv.get(cls, [])
+        if len(by_ccy) == 1 and base_tot:
+            ccy, comm = next(iter(by_ccy.items()))
+            eur_comm = base_tot[-1] - (base_tot[0] if len(base_tot) > 1 else 0.0)
+            if comm:
+                out[(cls, ccy)] = eur_comm / comm
+    return out
+
+
+def _option_meta(sym: str, info: dict) -> tuple[str, str, float]:
+    """(underlying, 'C'/'P', multiplier) from Financial Instrument Information, else from 'AAA 17JUN26 100 C'."""
+    d = info.get(sym) or {}
+    toks = sym.split()
+    und = (d.get("Underlying") or (toks[0] if toks else "")).strip()
+    right = (d.get("Type") or (toks[-1] if toks else "")).strip().upper()[:1]
+    mult = to_num(d.get("Multiplier")) or 100.0
+    return und, right if right in ("C", "P") else "", mult
+
+
+def _option_trades(trades: list[tuple[str, dict]], base: str, info: dict) -> list[dict]:
+    ratio = _class_ratio(trades, OPTION_CLASSES, base)
+    out = []
+    for kind, d in trades:
+        cls = d.get("Asset Category", "")
+        if kind != "Data" or cls not in OPTION_CLASSES or d.get("DataDiscriminator", "Order") not in ("Order", "Trade", ""):
+            continue
+        sym, q, ccy = (d.get("Symbol") or "").strip(), to_num(d.get("Quantity")), d.get("Currency", "")
+        und, right, mult = _option_meta(sym, info)
+        cash = abs(to_num(d.get("Proceeds")) + to_num(d.get("Comm/Fee")))   # paid incl. / received net of commission
+        rate = 1.0 if ccy == base else ratio.get((cls, ccy))
+        out.append({"date": (d.get("Date/Time") or "")[:10], "symbol": sym, "underlying": und, "right": right,
+                    "mult": mult, "qty": q, "ccy": ccy, "code": d.get("Code", ""),
+                    "eur": cash * abs(rate) if rate is not None else None})
     return out

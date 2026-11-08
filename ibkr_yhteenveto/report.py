@@ -168,7 +168,18 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
             ["Symboli", "Määrä", "Luovutushinnat", "Hankintamenot", "Tulos", "Käsittely"],
             [[o["symbol"] + (" (short)" if o["short"] else ""), o["qty"], o["proceeds_eur"], o["cost_eur"],
               o["proceeds_eur"] - o["cost_eur"], ", ".join(SOURCES.get(k, k) for k in o["methods"])]
+             if o.get("kind") != "option" else
+             [o["symbol"] + " (optio)", o["qty"], "–",
+              sum(e["premium_eur"] for e in pb.option_events if e["symbol"] == o["symbol"]), "–",
+              ", ".join(SOURCES.get(k, k) for k in o["methods"]) + " — preemio"]
              for o in pb.opening], [2, 3, 4])
+    if pb.option_events:
+        res["tabs"]["Toteutetut optiot"] = _t(
+            ["Päivä", "Optio", "Kohde-etuus", "Sopimuksia", "Preemio", "Käsittely"],
+            [[e["date"], e["symbol"], e["underlying"], e["contracts"],
+              e["premium_eur"] if e["kind"] == "exercise" else "–",
+              e.get("target", "") + " · " + ", ".join(SOURCES.get(k, k) for k in e["methods"])]
+             for e in pb.option_events], [4])
     # open lots at period end -> JSON the user can import next year as year-start choices
     res["end_lots"] = {"account": st.account, "as_of": st.period_end, "lots": pb.end_lots}
     return res, write_personal_workbook(pb)

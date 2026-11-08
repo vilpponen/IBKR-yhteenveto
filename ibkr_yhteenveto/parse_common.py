@@ -21,6 +21,15 @@ ASSET_CLASSES = {
 }
 # CFDs (hinnanerosopimukset): for individuals gains are capital income, losses are not deductible (Vero)
 CFD_CLASSES = {"CFDs", "Index CFDs", "Forex CFDs"}
+# Options on shares/indices (exercise/assignment delivers shares or cash). Futures options are not handled here.
+OPTION_CLASSES = {"Equity and Index Options", "Options", "Index Options"}
+# IBKR Codes table: tax lot-matching methods other than FIFO
+NON_FIFO_CODES = {"LI", "HC", "ML", "MLG", "MLL", "MSG", "MSL", "SL"}
+
+
+def codes(code: str) -> set[str]:
+    """'C;Ex;P' -> {'C', 'Ex', 'P'}"""
+    return {c.strip() for c in str(code or "").replace(",", ";").split(";") if c.strip()}
 
 
 def is_num(tok: str) -> bool:

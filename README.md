@@ -26,8 +26,9 @@ palvelimella muiden käyttöön; silloin sivu kertoo käyttäjälle, että rapor
 
 > ℹ️ **Kenelle työkalu sopii nyt.** Työkalu on tällä hetkellä tehty ensisijaisesti **aktiiviselle kaupankävijälle,
 > jonka salkku on vuoden alussa tyhjä** (positiot avataan ja suljetaan saman vuoden aikana). Aiempina vuosina
-> ostetuille erille sovellus kysyy käsittelytavan ([Vuoden alun positiot](#vuoden-alun-positiot)); optioiden
-> toteutukset, yritystapahtumat (esim. splitit) ja kryptot ovat vielä rajallisesti tuettuja — laskelma varoittaa niistä. Työkalua kehitetään palautteen perusteella
+> ostetuille erille sovellus kysyy käsittelytavan ([Vuoden alun positiot](#vuoden-alun-positiot)). Asetetut optiot
+> (toteutusvelvoite, vuodenvaihde), yritystapahtumat (esim. splitit) ja kryptot ovat vielä rajallisesti tuettuja —
+> laskelma varoittaa niistä. Työkalua kehitetään palautteen perusteella
 > ([Palaute](#palaute)).
 
 **Sisällysluettelo**
@@ -163,6 +164,8 @@ kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä rapor
 * **Arvopaperit (9A):** FIFO hankintaerittäin IBKR:n kauppakohtaisista EUR-määristä — myyntihinta myyntipäivän ja
   hankintameno ostopäivän kurssilla (Verohallinnon tapa). Luovutushinnat, hankintamenot, voitot ja tappiot.
 * **Johdannaiset** (futuurit, optiot): voitot ja tappiot.
+* **Optioiden toteutus:** ostetun osto-option preemio lisätään saatujen osakkeiden hankintamenoon ja ostetun
+  myyntioption preemio vähennetään osakkeiden luovutushinnasta (KHO 2012:69). Tarvitsee Activity Statement CSV:n.
 * **CFD:t:** voitot kauppakohtaisesti muuna pääomatulona; tappiot eivät ole vähennyskelpoisia, joten niitä ei
   huomioida (Verohallinto). Kauppakohtainen erittely tarvitsee Activity Statement CSV:n.
 * **Ulkomaan pääomatulot (16B):** osingot (85 % veronalaista), lähdeveron hyvitys sopimusrajaan asti, korot.
@@ -234,4 +237,4 @@ Rakenne: `ibkr_yhteenveto/` (parserit, laskenta, Excel), `server.py` (paikalline
 Local tool that turns Interactive Brokers statements (PDF/CSV) into Finnish tax figures: bookkeeping (KPL) and
 the EVL tax bridge for a Finnish limited company, or OmaVero capital-income figures for an individual (FIFO at
 trade-date EUR rates). Runs on `127.0.0.1` with Python's standard-library HTTP server; nothing leaves your machine.
-Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Currently aimed mainly at active traders who start the year with an empty portfolio (earlier-year lots are handled by asking the user per lot or by reading previous years' statements; option exercises, corporate actions and crypto are only partly supported yet); it will be improved based on feedback. Not tax advice. MIT licence.
+Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Currently aimed mainly at active traders who start the year with an empty portfolio (earlier-year lots are handled by asking the user per lot or by reading previous years' statements; exercised bought options adjust the shares' cost or sale price; written options, corporate actions and crypto are only partly supported yet); it will be improved based on feedback. Not tax advice. MIT licence.

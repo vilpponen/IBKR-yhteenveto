@@ -24,7 +24,7 @@ def write_personal_workbook(b: PBooks) -> bytes:
 
     om = Sheet(wb, "OmaVero-kentät", [42, 58, 18, 60])
     sm = Sheet(wb, "Arvopaperit yhteenveto", [14, 16, 18, 18, 16, 16, 16, 16, 30])
-    lu = Sheet(wb, "Luovutukset (FIFO)", [14, 12, 12, 12, 16, 16, 16, 30, 8])
+    lu = Sheet(wb, "Luovutukset (FIFO)", [14, 12, 12, 12, 16, 16, 16, 30, 8, 16])
     va = Sheet(wb, "Vuoden alun erät", [14, 12, 16, 16, 16, 12, 12, 40]) if b.opening else None
     de = Sheet(wb, "Johdannaiset", [16, 22, 16, 16, 16, 30])
     dv = Sheet(wb, "Osingot & lähdeverot", [12, 62, 8, 14, 14, 10, 8, 22])
@@ -59,13 +59,13 @@ def write_personal_workbook(b: PBooks) -> bytes:
              [sub, "EUR: myyntihinta myyntipäivän ja hankintameno ostopäivän kurssilla (IBKR Forex P/L Details).",
               "Myyntihinnasta on vähennetty myyntiprovisio; hankintamenoon sisältyy ostoprovisio."])
     lu.header(["Symboli", "Myyntipäivä", "Ostopäivä", "Määrä", "Luovutushinta €", "Hankintameno €",
-               "Voitto/tappio €", "Lähde", "Short"])
+               "Voitto/tappio €", "Lähde", "Short", "Sis. optiopreemio €"])
     r0 = lu.r
     for m in b.matches:
         r = lu.r
         lu.row([m.symbol, m.sale_date, m.buy_date, m.qty, round(m.proceeds, 2), round(m.cost, 2), f"=E{r}-F{r}",
-                m.source, "Kyllä" if m.short else ""],
-               ["in", "in", "in", "in", "in", "in", "f", "t", "t"], fmt=[None, None, None, "#,##0.####"])
+                m.source, "Kyllä" if m.short else "", round(m.premium, 2) if m.premium else None],
+               ["in", "in", "in", "in", "in", "in", "f", "t", "t", "in"], fmt=[None, None, None, "#,##0.####"])
     r1 = max(lu.r - 1, r0)
     LU = dict(sym=f"'{lu.name}'!$A${r0}:$A${r1}", L=f"'{lu.name}'!$E${r0}:$E${r1}",
               H=f"'{lu.name}'!$F${r0}:$F${r1}", R=f"'{lu.name}'!$G${r0}:$G${r1}")
@@ -87,9 +87,15 @@ def write_personal_workbook(b: PBooks) -> bytes:
                    "Viimeinen myynti", "Käsittely"])
         for o in b.opening:
             r = va.r
+            meth = ", ".join(SOURCES.get(k, k) for k in o["methods"])
+            if o.get("kind") == "option":
+                prem = sum(e["premium_eur"] for e in b.option_events if e["symbol"] == o["symbol"])
+                va.row([o["symbol"] + " (optio)", o["qty"], None, round(prem, 2), None, o["first_sale"], o["last_sale"],
+                        meth + " — preemio, toteutettu"], ["in", "in", None, "in", None, "in", "in", "t"],
+                       fmt=[None, "#,##0.####"])
+                continue
             va.row([o["symbol"] + (" (short)" if o["short"] else ""), o["qty"], round(o["proceeds_eur"], 2),
-                    round(o["cost_eur"], 2), f"=C{r}-D{r}", o["first_sale"], o["last_sale"],
-                    ", ".join(SOURCES.get(k, k) for k in o["methods"])],
+                    round(o["cost_eur"], 2), f"=C{r}-D{r}", o["first_sale"], o["last_sale"], meth],
                    ["in", "in", "in", "in", "f", "in", "in", "t"], fmt=[None, "#,##0.####"])
         va.blank()
         va.note("Käsittelytavat: Käyttäjän syöttämä = alkuperäiset ostotiedot; Edellisvuoden raportti = erä luettu "
@@ -133,6 +139,18 @@ def write_personal_workbook(b: PBooks) -> bytes:
         ref.update(FXG=de.q(f"C{r}") if s.include_fx else "0", FXL=de.q(f"D{r}") if s.include_fx else "0")
     else:
         ref.update(FXG="0", FXL="0")
+    if b.option_events:
+        de.blank()
+        de.section("TOTEUTETUT OPTIOT — preemio osakkeisiin (KHO 2012:69)", 6)
+        de.header(["Päivä", "Optio", "Preemio €", "Sopimuksia", "Kohde-etuus", "Käsittely"])
+        for ev in b.option_events:
+            de.row([ev["date"], ev["symbol"], round(ev["premium_eur"], 2) if ev["kind"] == "exercise" else None,
+                    ev["contracts"], ev["underlying"],
+                    ev.get("target", "") + " · " + ", ".join(SOURCES.get(k, k) for k in ev["methods"])],
+                   ["in", "in", "in", "in", "in", "t"])
+        de.note("Toteutetun osto-option preemio lisätään osakkeiden hankintamenoon; toteutetun myyntioption preemio "
+                "vähennetään luovutushinnasta. Optiorivin oma tulos on IBKR:llä 0, joten preemio ei ole Johdannaiset-"
+                "riveillä kahteen kertaan.")
     de.blank()
     de.section("CFD:T (muu pääomatulo, 16B) — voitot kauppakohtaisesti, tappioita ei huomioida", 6)
     de.header(["Päivä", "Symboli", "Tulos €", "Luokka", None, "Lähde"])
@@ -301,6 +319,12 @@ def write_personal_workbook(b: PBooks) -> bytes:
                                   "sijaan, jos se on suurempi — kannattaa vain suurivoittoisissa, pitkään pidetyissä erissä."),
         ("Johdannaiset", "Futuurit ja optiot: voitot ja tappiot IBKR:n realisoiduista tuloksista. Tappiot vähennetään "
                          "luovutusvoitoista ja muista pääomatuloista (5 v)."),
+        ("Optioiden toteutus", "Kun ostettu osto-optio toteutetaan, maksettu preemio kaupankäyntikuluineen kuuluu "
+                               "osakkeiden hankintamenoon (KHO 2012:69); ostetun myyntioption preemio vähennetään "
+                               "osakkeiden luovutushinnasta. Preemio muunnetaan euroiksi option ostopäivän kurssilla. "
+                               "Toteutus yhdistetään osakekauppaan saman päivän, kohde-etuuden ja määrän (sopimukset × "
+                               "kerroin) perusteella. Asetetun option toteutusvelvoitteessa osakkeiden hintaa ei oikaista "
+                               "(asettajan preemio verotetaan asetusvuonna)."),
         ("CFD:t", "Verohallinto: CFD-hinnanerosopimuksiin ei sovelleta luovutusvoittoverotuksen säännöksiä. Voitto on "
                   "pääomatuloa (OmaVero: muut pääomatulot), tappiota ei huomioida verotuksessa millään tavalla, ja jokainen "
                   "kauppa arvioidaan erikseen. Laskelma: kunkin sulkevan kaupan IBKR:n realisoitu tulos (CSV Trades, EUR "

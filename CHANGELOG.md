@@ -12,6 +12,14 @@ Uusimmat ensin. Yksi otsikko päivää kohden; saman päivän julkaisut ovat sen
 - Edellisten vuosien raportit voi lisätä samaan latauslaatikkoon: niistä rakennetaan erähistoria FIFO-järjestyksessä.
 - Valintojen vienti ja tuonti (JSON) sekä vuoden lopun avoimet erät ensi vuoden laskelmaan.
 - Työkirjaan Vuoden alun erät -välilehti; jokaisen luovutuksen hankintamenon peruste näkyy erittäin.
+- Yksityishenkilö: **toteutetut optiot**. Ostetun osto-option preemio lisätään saatujen osakkeiden hankintamenoon,
+  ostetun myyntioption preemio vähennetään luovutushinnasta (KHO 2012:69). Edellisenä vuonna ostetun option
+  preemio kysytään vuoden alun positioiden yhteydessä. Toteutusvelvoitteista (asetetut optiot) annetaan varoitus.
+- Varoitus, jos IBKR on käyttänyt muuta erätäsmäytystä kuin FIFO:a.
+
+**Korjattu**
+- CSV:n euromääräisissä osakeostoissa (ja keskikurssilla muunnetuissa CSV-kaupoissa) ostoprovisio pienensi
+  hankintamenoa, vaikka sen pitää kasvattaa sitä. PDF:n kauppakohtaiset EUR-määrät eivät olleet virheellisiä.
 
 **Muutettu**
 - README: huomautus, kenelle työkalu sopii nyt (aktiivinen kaupankävijä, salkku tyhjä vuoden alussa) ja mitkä

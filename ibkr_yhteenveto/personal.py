@@ -17,7 +17,7 @@ from datetime import date
 
 from .books import _is_div_wht, _is_pil, _div_country, wht_country
 from .model import Statement
-from .parse_common import CFD_CLASSES
+from .parse_common import CFD_CLASSES, OPTION_CLASSES, codes
 
 
 def _fi(x: float, d: int = 2) -> str:
@@ -74,6 +74,7 @@ class Match:
     cost: float          # hankintameno EUR (incl. buying commission)
     short: bool = False
     method: str = "fifo"  # key of SOURCES
+    premium: float = 0.0  # option premium EUR included in cost (exercised call) or deducted from proceeds (put)
 
     @property
     def source(self) -> str:
@@ -98,6 +99,7 @@ class PBooks:
     warnings: list[str] = field(default_factory=list)
     ru_by_symbol: dict[str, float] = field(default_factory=dict)
     opening: list[dict] = field(default_factory=list)    # year-start lots consumed this year + how they were handled
+    option_events: list[dict] = field(default_factory=list)  # exercises / assignments and how the premium was used
     end_lots: list[dict] = field(default_factory=list)   # open lots at period end (export for next year)
     preliminary: bool = False                             # some year-start lot has no user decision
 
@@ -114,12 +116,14 @@ def _ten_years(buy: str, sale: str) -> bool:
     return s_ >= anniv
 
 
-def _choice_lots(sym: str, opening: float, choice: dict | None, warnings: list[str]) -> list[list]:
-    """Year-start lots for `sym` from the user's choice: [qty_signed, eur_per_share|None, date, method]."""
+def _choice_lots(sym: str, opening: float, choice: dict | None, warnings: list[str],
+                 premium: bool = False) -> list[list]:
+    """Year-start lots for `sym` from the user's choice: [qty_signed, eur_per_unit|None, date, method, 0.0].
+    premium=True: an option position (cost = premium paid; no hankintameno-olettama)."""
     if not choice or choice.get("method") in (None, "", "unresolved"):
-        return [[opening, None, "avaava", "unresolved"]]
+        return [[opening, None, "avaava", "unresolved", 0.0]]
     if choice.get("method") == "ibkr":
-        return [[opening, None, "avaava", "ibkr"]]
+        return [[opening, None, "avaava", "ibkr", 0.0]]
     sign = 1.0 if opening > 0 else -1.0
     out, left = [], abs(opening)
     raw = choice.get("lots") or []
@@ -130,29 +134,130 @@ def _choice_lots(sym: str, opening: float, choice: dict | None, warnings: list[s
             continue
         d = str(lot.get("date") or "")[:10]
         if lot.get("olettama") or choice.get("method") == "olettama":
-            if sign < 0 or not d:
+            if sign < 0 or not d or premium:
                 warnings.append(f"{sym}: hankintameno-olettama vaatii ostopäivän eikä sovellu lyhyeen positioon — "
                                 "erä jätetty ratkaisemattomaksi.")
-                out.append([sign * q, None, "avaava", "unresolved"])
+                out.append([sign * q, None, "avaava", "unresolved", 0.0])
             else:
-                out.append([sign * q, None, d, "olettama"])
+                out.append([sign * q, None, d, "olettama", 0.0])
         else:
             cost = lot.get("cost_eur")
             if cost in (None, "") or not d:
                 warnings.append(f"{sym}: alkuperäisestä erästä puuttuu ostopäivä tai hankintameno — erä jätetty "
                                 "ratkaisemattomaksi.")
-                out.append([sign * q, None, "avaava", "unresolved"])
+                out.append([sign * q, None, "avaava", "unresolved", 0.0])
             else:
-                out.append([sign * q, abs(float(cost)) / q, d, "manual"])
+                out.append([sign * q, abs(float(cost)) / q, d, "manual", 0.0])
         left -= q
     if left > 1e-6:
         warnings.append(f"{sym}: syötetyt erät ({_fi(abs(opening) - left, 4)} kpl) eivät kata vuoden alun positiota "
                         f"({_fi(abs(opening), 4)} kpl) — loput {_fi(left, 4)} kpl ratkaisemattomia.")
-        out.append([sign * left, None, "avaava", "unresolved"])
+        out.append([sign * left, None, "avaava", "unresolved", 0.0])
     return out
 
 
-def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None) -> tuple[list[Match], list[dict]]:
+def _ibkr_premium(st: Statement, ev: dict, leg: dict | None) -> float | None:
+    """IBKR folds an exercised call's premium into the share basis: premium ≈ basis − cash of the Ex share row,
+    converted at the leg's own EUR/currency ratio. None when it cannot be derived (e.g. puts)."""
+    if ev["right"] != "C" or not leg:
+        return None
+    for r in st.exercise_rows:
+        if r["date"] == ev["date"] and r["symbol"] == ev["underlying"] and abs(r["qty"] - leg["qty"]) < 1e-6 \
+                and r["cash"] and abs(r["basis"]) > abs(r["cash"]):
+            return (abs(r["basis"]) - abs(r["cash"])) * (leg["eur"] / abs(r["cash"]))
+    return None
+
+
+def option_events(st: Statement, warnings: list[str], choices: dict | None = None) -> tuple[list[dict], list[dict]]:
+    """FIFO over option contracts; returns (exercise/assignment events, stock legs with the premium applied).
+
+    Exercised long call: premium paid is added to the cost of the shares received (KHO 2012:69).
+    Exercised long put: premium paid is deducted from the sale price of the shares delivered.
+    Assignment of a written option: no adjustment here (premium taxed when written — see 62N-87)."""
+    choices = choices or {}
+    legs = [dict(x) for x in st.stock_legs]
+    if not st.option_trades:
+        return [], legs
+    end_qty = defaultdict(float)
+    for p in st.positions:
+        if p.asset_class in OPTION_CLASSES:
+            end_qty[p.symbol] += p.quantity
+    by_sym = defaultdict(list)
+    for i, t in enumerate(st.option_trades):
+        by_sym[t["symbol"]].append((t["date"], i, t))
+    events = []
+    for sym, ts in by_sym.items():
+        ts.sort(key=lambda x: (x[0], x[1]))
+        opening = end_qty.get(sym, 0.0) - sum(t["qty"] for _, _, t in ts)
+        lots: deque = deque()   # [contracts_signed, eur_per_contract or None, date, method]
+        if abs(opening) > 1e-9:
+            lots.extend([l[:4] for l in _choice_lots(sym, opening, choices.get(sym), warnings, premium=True)])
+        for d, _, t in ts:
+            q, cs = t["qty"], codes(t["code"])
+            px = (t["eur"] / abs(q)) if (q and t["eur"] is not None) else None
+            used = []
+            while abs(q) > 1e-9 and lots and (lots[0][0] > 0) != (q > 0):
+                lot = lots[0]
+                n = min(abs(q), abs(lot[0]))
+                used.append((n, lot[1], lot[3], lot[2]))
+                lot[0] += n if lot[0] < 0 else -n
+                q += n if q < 0 else -n
+                if abs(lot[0]) < 1e-9:
+                    lots.popleft()
+            if abs(q) > 1e-9:
+                lots.append([q, px, d, "fifo"])
+            if used and ("Ex" in cs or "A" in cs):
+                n_tot = sum(u[0] for u in used)
+                known = [(n, e) for n, e, m, _ in used if e is not None and m not in ("unresolved", "ibkr")]
+                events.append({"date": d, "symbol": sym, "underlying": t["underlying"], "right": t["right"],
+                               "mult": t["mult"], "contracts": n_tot, "kind": "exercise" if "Ex" in cs else "assignment",
+                               "premium_eur": sum(n * e for n, e in known),
+                               "unknown_contracts": n_tot - sum(n for n, _ in known),
+                               "methods": sorted({m for _, _, m, _ in used}),
+                               "bought": min(u[3] for u in used)})
+    used_legs = set()
+    for ev in events:
+        if ev["kind"] != "exercise":
+            warnings.append(f"{ev['symbol']}: toteutusvelvoite {ev['date']} (asetettu optio) — osakkeiden hintaa ei "
+                            "oikaista preemiolla; asetetun option preemio verotetaan asetusvuonna (ks. muistio).")
+            ev["target"] = "Toteutusvelvoite — ei oikaistu"
+            continue
+        if ev["right"] not in ("C", "P"):
+            warnings.append(f"{ev['symbol']}: option tyyppiä (C/P) ei tunnistettu — preemiota ei kohdistettu.")
+            ev["target"] = "Ei kohdistettu"
+            continue
+        want = ev["contracts"] * ev["mult"] * (1 if ev["right"] == "C" else -1)
+        leg = next((x for i, x in enumerate(legs) if i not in used_legs and x["symbol"] == ev["underlying"]
+                    and x["date"] == ev["date"] and abs(x["qty"] - want) < 1e-6), None)
+        if leg is None:
+            warnings.append(f"{ev['symbol']}: toteutukselle {ev['date']} ei löytynyt osakekauppaa ({ev['underlying']}, "
+                            f"{_fi(want, 0)} kpl) — preemiota ei kohdistettu.")
+            ev["target"] = "Ei kohdistettu"
+            continue
+        used_legs.add(legs.index(leg))
+        prem = ev["premium_eur"]
+        if ev["unknown_contracts"] > 1e-9:
+            if "ibkr" in ev["methods"]:
+                sug = _ibkr_premium(st, ev, leg)
+                if sug is None:
+                    warnings.append(f"{ev['symbol']}: preemiota ei voitu johtaa IBKR:n luvuista — käytetty 0 €.")
+                else:
+                    prem += sug * ev["unknown_contracts"] / ev["contracts"]
+            ev["ibkr_suggestion_eur"] = _ibkr_premium(st, ev, leg)
+        ev["premium_eur"] = prem
+        if ev["right"] == "C":
+            leg["eur"] += prem
+            ev["target"] = "Osakkeiden hankintamenoon"
+        else:
+            leg["eur"] = max(leg["eur"] - prem, 0.0)
+            ev["target"] = "Vähennetty osakkeiden luovutushinnasta"
+        leg["opt_prem"] = leg.get("opt_prem", 0.0) + prem
+        leg["option"] = ev["symbol"]
+    return events, legs
+
+
+def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None,
+              legs_override: list[dict] | None = None) -> tuple[list[Match], list[dict]]:
     """FIFO per symbol over history legs (earlier statements) + this period's legs.
 
     Returns this period's disposals and the lots still open at period end. The year-start position (end holding
@@ -164,18 +269,20 @@ def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None) -
             end_qty[p.symbol] += p.quantity
     start = st.period_start or ""
     legs_by_sym = defaultdict(list)
-    for i, x in enumerate(list(st.history_legs) + list(st.stock_legs)):
+    stock_legs = legs_override if legs_override is not None else st.stock_legs
+    for i, x in enumerate(list(st.history_legs) + list(stock_legs)):
         legs_by_sym[x["symbol"]].append((x["date"], i, x))
     out: list[Match] = []
     end_lots: list[dict] = []
     for sym in sorted(set(legs_by_sym) | {k for k, q in end_qty.items() if abs(q) > 1e-9}):
         legs = sorted(legs_by_sym.get(sym, []), key=lambda t: (t[0], t[1]))
         opening = end_qty.get(sym, 0.0) - sum(x["qty"] for _, _, x in legs)
-        lots: deque = deque()  # [qty_signed, eur_per_share or None, date, method]
+        lots: deque = deque()  # [qty_signed, eur_per_share or None, date, method, option premium per share]
         if abs(opening) > 1e-9:
             lots.extend(_choice_lots(sym, opening, choices.get(sym), warnings))
         for d, _, x in legs:
             q, px = x["qty"], x["eur"] / abs(x["qty"]) if x["qty"] else 0.0
+            pps = x.get("opt_prem", 0.0) / abs(x["qty"]) if x["qty"] else 0.0
             in_period = d >= start
             while abs(q) > 1e-9 and lots and (lots[0][0] > 0) != (q > 0):
                 lot = lots[0]
@@ -188,13 +295,14 @@ def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None) -
                         m = Match(sym, d, lot[2], n, px * n, cost, method=lot[3])
                     else:       # buying back a short lot
                         m = Match(sym, d, lot[2], n, (lot[1] or 0.0) * n, px * n, short=True, method=lot[3])
+                    m.premium = (lot[4] + pps) * n
                     out.append(m)
                 lot[0] += n if lot[0] < 0 else -n
                 q += n if q < 0 else -n
                 if abs(lot[0]) < 1e-9:
                     lots.popleft()
             if abs(q) > 1e-9:
-                lots.append([q, px, d, "fifo" if in_period else "history"])
+                lots.append([q, px, d, "fifo" if in_period else "history", pps])
         for lot in lots:
             known = lot[1] is not None
             end_lots.append({"symbol": sym, "date": lot[2] if lot[2] != "avaava" else "", "qty": lot[0],
@@ -204,7 +312,8 @@ def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None) -
 
 
 def fifo(st: Statement, warnings: list[str], choices: dict | None = None) -> list[Match]:
-    return fifo_full(st, warnings, choices)[0]
+    _, legs = option_events(st, [], choices)
+    return fifo_full(st, warnings, choices, legs)[0]
 
 
 def _ibkr_backout(matches: list[Match], ru: dict[str, float]) -> dict[str, float]:
@@ -262,11 +371,33 @@ def opening_lots(st: Statement) -> list[dict]:
         if p.asset_class == "Stocks":
             end_qty[p.symbol] += p.quantity
     rows = opening_summary(ms, _ibkr_backout(ms, ru))
+    for r in rows:
+        r["kind"] = "stock"
     for r in rows:   # the whole year-start position (the user enters lots for all of it)
         legs = [x["qty"] for x in list(st.history_legs) + list(st.stock_legs) if x["symbol"] == r["symbol"]]
         r["opening_qty"] = end_qty.get(r["symbol"], 0.0) - sum(legs)
         r["ccy"] = next((x["ccy"] for x in st.stock_legs if x["symbol"] == r["symbol"]), "")
-    return rows
+    return rows + option_opening(option_events(st, [])[0], st)
+
+
+def option_opening(events: list[dict], st: Statement) -> list[dict]:
+    """Exercised options opened before the period (premium unknown) — need the user's decision like shares."""
+    out = {}
+    for ev in events:
+        if ev["kind"] != "exercise" or ev["unknown_contracts"] <= 1e-9:
+            continue
+        o = out.setdefault(ev["symbol"], {
+            "symbol": ev["symbol"], "kind": "option", "short": False, "qty": 0.0, "proceeds_eur": None,
+            "cost_eur": 0.0, "first_sale": ev["date"], "last_sale": ev["date"], "methods": ev["methods"],
+            "ibkr_suggestion_eur": None, "ccy": next((t["ccy"] for t in st.option_trades if t["symbol"] == ev["symbol"]), ""),
+            "opening_qty": sum(p.quantity for p in st.positions if p.symbol == ev["symbol"])
+                           - sum(t["qty"] for t in st.option_trades if t["symbol"] == ev["symbol"]),
+            "underlying": ev["underlying"]})
+        o["qty"] += ev["unknown_contracts"]
+        o["last_sale"] = max(o["last_sale"], ev["date"])
+        if ev.get("ibkr_suggestion_eur") is not None:
+            o["ibkr_suggestion_eur"] = (o["ibkr_suggestion_eur"] or 0.0) + ev["ibkr_suggestion_eur"] * ev["unknown_contracts"] / ev["contracts"]
+    return list(out.values())
 
 
 def build_personal(st: Statement, s: PSettings) -> PBooks:
@@ -281,9 +412,13 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
                           "käytä PDF-raporttia (Forex P/L Details).")
 
     b.ru_by_symbol = {r.symbol: r.realized for r in st.ru if r.asset_class == "Stocks"}
-    b.matches, b.end_lots = fifo_full(st, b.warnings, s.opening_choices)
+    b.option_events, legs = option_events(st, b.warnings, s.opening_choices)
+    b.matches, b.end_lots = fifo_full(st, b.warnings, s.opening_choices, legs)
     backout = _ibkr_backout(b.matches, b.ru_by_symbol)
-    b.opening = opening_summary(b.matches, backout)
+    b.opening = [dict(o, kind="stock") for o in opening_summary(b.matches, backout)]
+    b.opening += option_opening(b.option_events, st)
+    if st.option_trades and not st.stock_legs:
+        b.warnings.append("Optiokauppoja löytyi, mutta osakekauppoja ei — toteutusten preemiota ei voitu kohdistaa.")
     unresolved = [o["symbol"] for o in b.opening if "unresolved" in o["methods"]]
     b.preliminary = bool(unresolved)
     if unresolved:
