@@ -2,7 +2,9 @@
 
 Securities (stocks/ETFs): FIFO over exact EUR trade legs — sale price at the sale-date rate, cost at the
 purchase-date rate (Vero method), one gain/loss per acquisition lot.
-Derivatives (futures, options, CFDs): gross gains/losses from IBKR's R&U summary.
+Derivatives (futures, options): gross gains/losses from IBKR's R&U summary.
+CFDs: not disposals. Each profitable closing trade is other capital income; losses are not deductible and are ignored
+(Vero: CFD-hinnanerosopimukset). CFD financing costs found in interest/fees are likewise not deducted.
 Capital income tax: 30 % up to 30 000 €, 34 % above. Listed-company dividends 85 % taxable.
 Small disposals: if total sale prices <= 1 000 € the gains are tax-free (and losses only deductible if
 acquisition costs > 1 000 €).
@@ -14,6 +16,7 @@ from dataclasses import dataclass, field
 
 from .books import _is_div_wht, _is_pil, _div_country, wht_country
 from .model import Statement
+from .parse_common import CFD_CLASSES
 
 
 def _fi(x: float, d: int = 2) -> str:
@@ -21,8 +24,12 @@ def _fi(x: float, d: int = 2) -> str:
     x = 0.0 if abs(x) < 0.5 * 10 ** -d else x
     return f"{x:,.{d}f}".replace(",", "\u00a0").replace(".", ",")
 
-DERIVATIVE_CLASSES = {"Futures", "Equity and Index Options", "Options", "CFDs", "Index CFDs", "Forex CFDs",
-                      "Warrants", "Futures Options", "Options On Futures", "Structured Products"}
+DERIVATIVE_CLASSES = {"Futures", "Equity and Index Options", "Options", "Warrants", "Futures Options",
+                      "Options On Futures", "Structured Products"}
+
+
+def _is_cfd_cost(desc: str) -> bool:
+    return "cfd" in (desc or "").lower()
 
 
 @dataclass
@@ -64,6 +71,7 @@ class PBooks:
     s: PSettings
     matches: list[Match] = field(default_factory=list)
     derivatives: list = field(default_factory=list)
+    cfd_rows: list = field(default_factory=list)   # {"date","symbol","cls","eur","source"}
     v: dict[str, float] = field(default_factory=dict)
     wht_rows: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -158,7 +166,8 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     v["fx_gains"] = sum(r.profit for r in fx) if s.include_fx else 0.0
     v["fx_losses"] = sum(r.loss for r in fx) if s.include_fx else 0.0
     v["fx_memo"] = sum(r.realized for r in fx)
-    other = [r for r in st.ru if r.asset_class not in DERIVATIVE_CLASSES | {"Stocks", "Forex"}]
+    _cfd(b)
+    other = [r for r in st.ru if r.asset_class not in DERIVATIVE_CLASSES | CFD_CLASSES | {"Stocks", "Forex"}]
     if other:
         b.warnings.append("Tuntemattomat omaisuusluokat (ei mukana): " + ", ".join(sorted({r.asset_class for r in other})))
 
@@ -179,13 +188,16 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     v["div_taxable"] = v["div_ord"] * s.div_taxable_share
     v["pil_taxable"] = v["div_pil"] * s.pil_taxable_share
     v["int_income"] = sum(x.amount_eur for x in st.interest if x.amount_eur > 0)
-    v["int_expense"] = -sum(x.amount_eur for x in st.interest if x.amount_eur < 0)
-    v["fees"] = -(st.fees_total_eur or 0.0)
+    v["int_expense"] = -sum(x.amount_eur for x in st.interest if x.amount_eur < 0 and not _is_cfd_cost(x.description))
+    cfd_int = -sum(x.amount_eur for x in st.interest if x.amount_eur < 0 and _is_cfd_cost(x.description))
+    cfd_fee = -sum(x.amount_eur for x in st.fees if _is_cfd_cost(x.description))
+    v["fees"] = -(st.fees_total_eur or 0.0) - cfd_fee
+    v["cfd_costs_ignored"] = cfd_int + cfd_fee
     v["wht_div"] = -sum(x.amount_eur for x in st.withholding if _is_div_wht(x.description))
     v["wht_int"] = -sum(x.amount_eur for x in st.withholding if not _is_div_wht(x.description))
 
     # capital income
-    v["other_ci"] = v["div_taxable"] + v["pil_taxable"] + v["int_income"]
+    v["other_ci"] = v["div_taxable"] + v["pil_taxable"] + v["int_income"] + v["cfd_gains"]
     v["deductions"] = v["int_expense"] + v["fees"]
     before_cf = v["disp_net"] + v["other_ci"] - v["deductions"]
     v["cf_used"] = min(s.loss_carryforward, max(0.0, v["disp_net"] + v["other_ci"]))
@@ -229,6 +241,34 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     return b
 
 
+def _cfd(b: PBooks) -> None:
+    """CFD gains per closing trade (CSV Trades), else per IBKR R&U lot split (PDF only). Losses are ignored."""
+    st, v = b.st, b.v
+    ru = [r for r in st.ru if r.asset_class in CFD_CLASSES]
+    trades = st.cfd_trades
+    if trades and all(x.get("eur") is not None for x in trades):
+        b.cfd_rows = [{"date": x["date"], "symbol": x["symbol"], "cls": x["cls"], "eur": x["eur"],
+                       "source": "Kauppa (IBKR Trades)"} for x in trades]
+    elif ru:
+        for r in ru:
+            for amt in (r.profit, r.loss):
+                if amt:
+                    b.cfd_rows.append({"date": "", "symbol": r.symbol, "cls": r.asset_class, "eur": amt,
+                                       "source": "IBKR R&U (ei kauppaerittelyä)"})
+        b.warnings.append("CFD:t: kauppakohtaisia tuloksia ei löytynyt — voitot ja tappiot IBKR:n R&U-yhteenvedosta. "
+                          "Lisää Activity Statement CSV, niin CFD-voitot lasketaan kauppakohtaisesti.")
+    v["cfd_gains"] = sum(x["eur"] for x in b.cfd_rows if x["eur"] > 0)
+    v["cfd_losses_ignored"] = sum(x["eur"] for x in b.cfd_rows if x["eur"] < 0)
+    v["ru_cfd_net"] = sum(r.realized for r in ru)
+    net = v["cfd_gains"] + v["cfd_losses_ignored"]
+    if ru and abs(net - v["ru_cfd_net"]) > 0.02 * max(1.0, abs(v["ru_cfd_net"])) + 50:
+        b.warnings.append(f"CFD-kauppojen tulos {_fi(net, 0)} € poikkeaa IBKR:n R&U-tuloksesta "
+                          f"{_fi(v['ru_cfd_net'], 0)} € — tarkista CFD-kaupat.")
+    if b.cfd_rows:
+        b.warnings.append("CFD:t: voitot ovat muuta pääomatuloa (ei luovutusvoittoa); tappioita ei voi vähentää "
+                          "(Verohallinto). IBKR:n CFD-provisioita ei ole vähennetty voitoista.")
+
+
 def omavero_fields(b: PBooks) -> list[tuple[str, str, float, str]]:
     v = b.v
     rows = [
@@ -236,8 +276,8 @@ def omavero_fields(b: PBooks) -> list[tuple[str, str, float, str]]:
         ("Arvopapereiden luovutukset (OmaVero / 9A)", "Osakkeet ja rahastot — hankintamenot ja kulut yhteensä", v["sec_cost"], "FIFO, ostopäivän kurssi"),
         ("Arvopapereiden luovutukset (OmaVero / 9A)", "Osakkeet ja rahastot — luovutusvoitot yhteensä", v["sec_gains"], "Hankintaerittäin"),
         ("Arvopapereiden luovutukset (OmaVero / 9A)", "Osakkeet ja rahastot — luovutustappiot yhteensä", -v["sec_losses"], ""),
-        ("Arvopapereiden luovutukset (OmaVero / 9A)", "Johdannaiset (futuurit, optiot, CFD) — voitot", v["der_gains"], "IBKR R&U"),
-        ("Arvopapereiden luovutukset (OmaVero / 9A)", "Johdannaiset (futuurit, optiot, CFD) — tappiot", -v["der_losses"], "IBKR R&U"),
+        ("Arvopapereiden luovutukset (OmaVero / 9A)", "Johdannaiset (futuurit, optiot) — voitot", v["der_gains"], "IBKR R&U"),
+        ("Arvopapereiden luovutukset (OmaVero / 9A)", "Johdannaiset (futuurit, optiot) — tappiot", -v["der_losses"], "IBKR R&U"),
     ]
     if b.s.include_fx:
         rows += [("Arvopapereiden luovutukset (OmaVero / 9A)", "Valuutat — voitot", v["fx_gains"], "IBKR R&U Forex"),
@@ -251,6 +291,9 @@ def omavero_fields(b: PBooks) -> list[tuple[str, str, float, str]]:
         rows.append(("Ulkomaan pääomatulot (OmaVero / 16B)", "Osingot — brutto", v["div_ord"], "85 % veronalaista"))
     if v["div_pil"]:
         rows.append(("Ulkomaan pääomatulot (OmaVero / 16B)", "Muut pääomatulot — payment in lieu of dividend", v["div_pil"], "Osakelainauksen korvaus, 100 %"))
+    if b.cfd_rows:
+        rows.append(("Ulkomaan pääomatulot (OmaVero / 16B)", "Muut pääomatulot — CFD-voitot", v["cfd_gains"],
+                     "Voitolliset CFD-kaupat yhteensä; tappioita ei vähennetä"))
     if v["int_income"]:
         rows.append(("Ulkomaan pääomatulot (OmaVero / 16B)", "Korkotulot — brutto", v["int_income"],
                      f"Lähdevero {_fi(v['wht_int'])} € — palautus lähdevaltiosta" if v["wht_int"] else ""))
@@ -260,4 +303,10 @@ def omavero_fields(b: PBooks) -> list[tuple[str, str, float, str]]:
     ]
     if v["cf_used"]:
         rows.append(("Vähennykset", "Aiempien vuosien vahvistetut luovutustappiot", v["cf_used"], ""))
+    if b.cfd_rows or v["cfd_costs_ignored"]:
+        rows.append(("Ei ilmoiteta (tieto)", "Vähennyskelvottomat CFD-tappiot (ei huomioida)", -v["cfd_losses_ignored"],
+                     "Verohallinto: CFD-tappiota ei huomioida verotuksessa"))
+    if v["cfd_costs_ignored"]:
+        rows.append(("Ei ilmoiteta (tieto)", "CFD-rahoituskulut (ei vähennetty)", v["cfd_costs_ignored"],
+                     "Tulkinta: liittyvät CFD:ihin, joiden tappiot eivät ole vähennyskelpoisia"))
     return rows

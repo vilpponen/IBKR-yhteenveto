@@ -24,6 +24,18 @@ palvelimella muiden käyttöön; silloin sivu kertoo käyttäjälle, että rapor
 > ⚠️ **Ei veroneuvontaa.** Työkalu tekee laskelman ja näyttää perusteet, mutta tulkinnat (esim. omaisuuslaji,
 > lähdeverojen hyvitys) kannattaa vahvistaa kirjanpitäjältä tai Verohallinnosta. Säännöt: verovuodet 2025–2026.
 
+**Sisällysluettelo**
+
+* [Käyttöönotto](#käyttöönotto)
+* [Mitkä raportit IBKR:stä](#mitkä-raportit-ibkrstä)
+* [Osakeyhtiö (Oy)](#osakeyhtiö-oy)
+* [Yksityishenkilö](#yksityishenkilö)
+* [Tarkistukset](#tarkistukset)
+* [Palaute](#palaute)
+* [Viimeisimmät muutokset](#viimeisimmät-muutokset)
+* [Kehitys](#kehitys)
+* [English](#english)
+
 ---
 
 ## Käyttöönotto
@@ -141,7 +153,9 @@ kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä rapor
 
 * **Arvopaperit (9A):** FIFO hankintaerittäin IBKR:n kauppakohtaisista EUR-määristä — myyntihinta myyntipäivän ja
   hankintameno ostopäivän kurssilla (Verohallinnon tapa). Luovutushinnat, hankintamenot, voitot ja tappiot.
-* **Johdannaiset** (futuurit, optiot, CFD): voitot ja tappiot.
+* **Johdannaiset** (futuurit, optiot): voitot ja tappiot.
+* **CFD:t:** voitot kauppakohtaisesti muuna pääomatulona; tappiot eivät ole vähennyskelpoisia, joten niitä ei
+  huomioida (Verohallinto). Kauppakohtainen erittely tarvitsee Activity Statement CSV:n.
 * **Ulkomaan pääomatulot (16B):** osingot (85 % veronalaista), lähdeveron hyvitys sopimusrajaan asti, korot.
 * **Vähennykset:** marginaalilainan korot, IBKR-kulut, aiempien vuosien vahvistetut tappiot.
 * **Pienten luovutusten verovapaus** (luovutushinnat ≤ 1 000 €), pääomatulovero 30 % / 34 % (> 30 000 €).
@@ -166,7 +180,17 @@ Virheilmoitukset ja parannusehdotukset:
 sähköpostiin. Kuvaile ongelma yleisellä tasolla tai muuta luvut keksityiksi.
 Tietoturvaongelmat ilmoitetaan yksityisesti: katso [SECURITY.md](SECURITY.md).
 
-Mitä on muuttunut: [CHANGELOG.md](CHANGELOG.md).
+## Viimeisimmät muutokset
+
+<!-- muutokset:alku -->
+* 2026-11-08 — CFD-korjaus ja README-sisällysluettelo
+* 2026-11-07 — Palautekanavat
+* 2026-11-07 — Demo ja ohjeet
+* 2026-11-07 — Palvelin ei tallenna mitään
+* 2026-11-07 — Windows-asennus
+
+Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).
+<!-- muutokset:loppu -->
 
 ## Kehitys
 
@@ -174,6 +198,7 @@ Mitä on muuttunut: [CHANGELOG.md](CHANGELOG.md).
 .venv/bin/pip install pytest
 .venv/bin/python -m pytest tests            # julkiset testit (keksitty esimerkkiaineisto)
 python scripts/check_private.py             # estää tilinumerot, PDF/XLSX:t ja oikeat CSV:t repossa
+python scripts/readme_sync.py --write       # päivittää "Viimeisimmät muutokset" CHANGELOG.md:stä
 ln -sf ../../scripts/check_private.py .git/hooks/pre-commit
 ```
 

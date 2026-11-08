@@ -19,6 +19,8 @@ ASSET_CLASSES = {
     "Crypto", "Cryptocurrency", "Treasury Bills", "Futures Options", "Index CFDs",
     "Forex CFDs", "Metals", "Stock Yield Enhancement Program",
 }
+# CFDs (hinnanerosopimukset): for individuals gains are capital income, losses are not deductible (Vero)
+CFD_CLASSES = {"CFDs", "Index CFDs", "Forex CFDs"}
 
 
 def is_num(tok: str) -> bool:

@@ -114,6 +114,8 @@ class Statement:
     # stock trade legs with exact EUR value (Forex P/L Details for non-base trades, Trades for base-ccy trades)
     # each: {"date","symbol","qty","ccy","eur","exact"} — qty < 0 = sale
     stock_legs: list[dict] = field(default_factory=list)
+    # realized P/L per closing CFD trade (CSV Trades): {"date","symbol","cls","ccy","pl","eur"} — eur None = unconverted
+    cfd_trades: list[dict] = field(default_factory=list)
     etf_symbols: set[str] = field(default_factory=set)  # from Financial Instrument Information (CSV)
     warnings: list[str] = field(default_factory=list)
 
@@ -150,6 +152,7 @@ class Statement:
         for f in lines:
             setattr(st, f, [CashLine(**r) for r in d.get(f, [])])
         st.stock_legs = [dict(x) for x in d.get("stock_legs", [])]
+        st.cfd_trades = [dict(x) for x in d.get("cfd_trades", [])]
         st.etf_symbols = set(d.get("etf_symbols", []))
         st.source_files, st.warnings = list(st.source_files), list(st.warnings)
         st.change_in_nav, st.commissions_by_class = dict(st.change_in_nav), dict(st.commissions_by_class)
@@ -166,7 +169,7 @@ class Statement:
             for k, v in getattr(other, f).items():
                 d.setdefault(k, v)
         for f in ("ru", "positions", "forex_balances", "interest", "fees", "withholding",
-                  "dividends", "deposits", "transaction_fee_lines", "stock_legs"):
+                  "dividends", "deposits", "transaction_fee_lines", "stock_legs", "cfd_trades"):
             if not getattr(self, f) and getattr(other, f):
                 setattr(self, f, getattr(other, f))
         # exact per-trade EUR legs (PDF Forex P/L Details) beat CSV legs converted at an average rate

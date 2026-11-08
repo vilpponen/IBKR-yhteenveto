@@ -12,6 +12,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from .xlsx_mem import workbook_bytes
 
 from .books import Books, _is_div_wht, _is_pil, classify_transfers, wht_country
+from .parse_common import CFD_CLASSES
 
 FONT = "Arial"
 NUM = '#,##0.00;-#,##0.00;"–"'
@@ -584,6 +585,10 @@ def write_workbook(b: Books) -> bytes:
         ("7. Siirrot", "Talletukset ja nostot ovat siirtoja yhtiön oman pankkitilin ja IBKR-tilin välillä (tili 1900, vastakirjaus pankkitilille pääkirjassa). Ei tulos- eikä verovaikutusta. IBKR:n teksti 'Disbursement Initiated by …' tarkoittaa vain nostopyynnön tekijää."),
         ("8. Dokumentaatio", "Säilytä: IBKR Activity Statement (PDF+CSV), Realized Summary, lähdeverotodistukset, tämä työkirja."),
     ]
+    if any(r.asset_class in CFD_CLASSES for r in b.st.ru):
+        notes.append(("9. CFD:t", "CFD-kauppojen voitot ja tappiot on käsitelty kuten muut johdannaiset (veronalaisia / "
+                      "vähennyskelpoisia). Verohallinnon EVL-johdannaisohje (2014) ei käsittele CFD:itä — vahvista "
+                      "käsittely kirjanpitäjän kanssa. Henkilöverotuksessa CFD-tappiot eivät ole vähennyskelpoisia."))
     for k, t_ in notes:
         r = muis.row([k, t_], ["t", "t"])
         muis.ws.cell(r, 2).alignment = Alignment(wrap_text=True, vertical="top")

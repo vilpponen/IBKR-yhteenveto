@@ -11,7 +11,7 @@ import io
 from pathlib import Path
 
 from .model import CashLine, ForexBalance, NavRow, Position, RURow, Statement
-from .parse_common import convert_groups, finalize_positions, parse_period, to_num
+from .parse_common import CFD_CLASSES, convert_groups, finalize_positions, parse_period, to_num
 
 CASH_MAP = {
     "Interest": "interest", "Fees": "fees", "Withholding Tax": "withholding",
@@ -155,6 +155,8 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
             st.stock_legs.append({"date": (d.get("Date/Time") or "")[:10], "symbol": d.get("Symbol", ""), "qty": q,
                                   "ccy": ccy, "eur": amt * abs(ratio[ccy]), "exact": False})
 
+    st.cfd_trades = _cfd_trades(rows.get("Trades", []), base)
+
     # ---- Cash sections
     for sec, attr in CASH_MAP.items():
         lines: list[CashLine] = []
@@ -208,3 +210,42 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
         if (d.get("Type") or "").upper() in ("ETF", "ETN", "ETC", "FUND"):
             st.etf_symbols.add(d.get("Symbol", ""))
     return st
+
+
+def _cfd_trades(trades: list[tuple[str, dict]], base: str) -> list[dict]:
+    """Realized P/L of each closing CFD trade, converted to base currency.
+
+    Non-base rows use the class's commission ratio (Total row in base / Total row in the trade currency); commissions
+    always have the same sign, so the ratio is stable even when the net P/L is close to zero. When a class has several
+    foreign currencies the ratio is unknown and `eur` stays None (the personal engine then falls back to IBKR R&U)."""
+    out, native, conv = [], {}, {}
+    for kind, d in trades:
+        cls = d.get("Asset Category", "")
+        if cls not in CFD_CLASSES:
+            continue
+        if kind == "Total":
+            ccy = d.get("Currency", "")
+            if ccy == base:
+                conv.setdefault(cls, []).append(to_num(d.get("Comm/Fee")))
+            else:
+                native.setdefault(cls, {})[ccy] = to_num(d.get("Comm/Fee"))
+        elif kind == "Data" and d.get("DataDiscriminator", "Order") in ("Order", "Trade", ""):
+            pl = to_num(d.get("Realized P/L"))
+            if pl:
+                out.append({"date": (d.get("Date/Time") or "")[:10], "symbol": d.get("Symbol", ""), "cls": cls,
+                            "ccy": d.get("Currency", ""), "pl": pl, "eur": None})
+    ratio: dict[tuple[str, str], float] = {}
+    for cls, by_ccy in native.items():
+        base_tot = conv.get(cls, [])
+        if len(by_ccy) == 1 and base_tot:
+            ccy, comm = next(iter(by_ccy.items()))
+            # with native base-currency CFDs IBKR prints that block's Total first, then the overall base Total
+            eur_comm = base_tot[-1] - (base_tot[0] if len(base_tot) > 1 else 0.0)
+            if comm:
+                ratio[(cls, ccy)] = eur_comm / comm
+    for x in out:
+        if x["ccy"] == base:
+            x["eur"] = x["pl"]
+        elif (x["cls"], x["ccy"]) in ratio:
+            x["eur"] = x["pl"] * ratio[(x["cls"], x["ccy"])]
+    return out
