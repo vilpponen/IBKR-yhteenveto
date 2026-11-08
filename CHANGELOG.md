@@ -10,7 +10,7 @@ https://ibkr.arxsavonum.com päivitetään julkaisun jälkeen.
   (OmaVero 16B), tappiollisia kauppoja ei huomioida (Verohallinto). CFD:iin liittyviä rahoituskuluja ei vähennetä.
   Osakeyhtiön laskelma ei muutu; muistio pyytää vahvistamaan CFD:iden käsittelyn kirjanpitäjältä.
 
-## 2026-11-07 — Palautekanavat
+## 2026-11-07 — Palautekanavat ([#5](https://github.com/vilpponen/IBKR-yhteenveto/pull/5))
 
 **Uutta**
 - Palaute ja virheilmoitukset: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues/new/choose)
