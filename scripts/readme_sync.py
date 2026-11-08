@@ -5,7 +5,7 @@
     python scripts/readme_sync.py --write   # rewrite README's "Viimeisimmät muutokset" list from CHANGELOG.md
 
 "Viimeisimmät muutokset" lists the 5 newest released CHANGELOG entries (the "Tulossa (dev)" section is not a release)
-between the <!-- muutokset:alku --> and <!-- muutokset:loppu --> markers. Every in-page link (#anchor) in README must
+between the <!-- muutokset:alku --> and <!-- muutokset:loppu --> markers, as "date — title" only (no PR links). Every in-page link (#anchor) in README must
 point to a heading, using GitHub's anchor rules (lowercase, spaces → '-', punctuation dropped, ä/ö kept).
 """
 from __future__ import annotations
@@ -51,8 +51,13 @@ def releases(changelog: str) -> list[str]:
     return [h for h in heads if re.match(r"\d{4}-\d{2}-\d{2}", h)][:N]
 
 
+def plain(heading: str) -> str:
+    """Release heading without its PR link: '2026-11-07 — Demo ([#4](…))' -> '2026-11-07 — Demo'."""
+    return re.sub(r"\s*\(\[#\d+\]\([^)]*\)\)\s*$", "", heading).strip()
+
+
 def expected_block(changelog: str) -> str:
-    lines = [f"* {h}" for h in releases(changelog)]
+    lines = [f"* {plain(h)}" for h in releases(changelog)]
     return "\n".join([START, *lines, "", "Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).", END])
 
 

@@ -183,11 +183,11 @@ Tietoturvaongelmat ilmoitetaan yksityisesti: katso [SECURITY.md](SECURITY.md).
 ## Viimeisimmät muutokset
 
 <!-- muutokset:alku -->
-* 2026-11-07 — Palautekanavat ([#5](https://github.com/vilpponen/IBKR-yhteenveto/pull/5))
-* 2026-11-07 — Demo ja ohjeet ([#4](https://github.com/vilpponen/IBKR-yhteenveto/pull/4))
-* 2026-11-07 — Palvelin ei tallenna mitään ([#3](https://github.com/vilpponen/IBKR-yhteenveto/pull/3))
-* 2026-11-07 — Windows-asennus ([#2](https://github.com/vilpponen/IBKR-yhteenveto/pull/2))
-* 2026-11-07 — macOS-asennus ([#1](https://github.com/vilpponen/IBKR-yhteenveto/pull/1))
+* 2026-11-07 — Palautekanavat
+* 2026-11-07 — Demo ja ohjeet
+* 2026-11-07 — Palvelin ei tallenna mitään
+* 2026-11-07 — Windows-asennus
+* 2026-11-07 — macOS-asennus
 
 Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).
 <!-- muutokset:loppu -->

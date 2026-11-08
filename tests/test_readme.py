@@ -23,6 +23,13 @@ def test_readme_matches_changelog_and_links_resolve():
     assert not any("Tulossa" in r for r in rs.releases(changelog))
 
 
+def test_no_pr_links_in_readme_list():
+    assert rs.plain("2026-11-07 — Demo ja ohjeet ([#4](https://github.com/x/y/pull/4))") == "2026-11-07 — Demo ja ohjeet"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    block = readme[readme.index(rs.START):readme.index(rs.END)]
+    assert "/pull/" not in block
+
+
 def test_mismatch_detected():
     changelog = "## Tulossa (dev)\n\n## 2026-01-02 — B\n\n## 2026-01-01 — A\n"
     readme = f"## Viimeisimmät muutokset\n{rs.START}\n* 2026-01-01 — A\n{rs.END}\n[x](#puuttuu)\n"
