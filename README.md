@@ -24,6 +24,12 @@ palvelimella muiden käyttöön; silloin sivu kertoo käyttäjälle, että rapor
 > ⚠️ **Ei veroneuvontaa.** Työkalu tekee laskelman ja näyttää perusteet, mutta tulkinnat (esim. omaisuuslaji,
 > lähdeverojen hyvitys) kannattaa vahvistaa kirjanpitäjältä tai Verohallinnosta. Säännöt: verovuodet 2025–2026.
 
+> ℹ️ **Kenelle työkalu sopii nyt.** Työkalu on tällä hetkellä tehty ensisijaisesti **aktiiviselle kaupankävijälle,
+> jonka salkku on vuoden alussa tyhjä** (positiot avataan ja suljetaan saman vuoden aikana). Aiempina vuosina
+> ostettujen erien hankintamenot, optioiden toteutukset, yritystapahtumat (esim. splitit) ja kryptot ovat vielä
+> rajallisesti tuettuja — laskelma varoittaa niistä. Työkalua kehitetään palautteen perusteella
+> ([Palaute](#palaute)).
+
 **Sisällysluettelo**
 
 * [Käyttöönotto](#käyttöönotto)
@@ -212,4 +218,4 @@ Rakenne: `ibkr_yhteenveto/` (parserit, laskenta, Excel), `server.py` (paikalline
 Local tool that turns Interactive Brokers statements (PDF/CSV) into Finnish tax figures: bookkeeping (KPL) and
 the EVL tax bridge for a Finnish limited company, or OmaVero capital-income figures for an individual (FIFO at
 trade-date EUR rates). Runs on `127.0.0.1` with Python's standard-library HTTP server; nothing leaves your machine.
-Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Not tax advice. MIT licence.
+Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Currently aimed mainly at active traders who start the year with an empty portfolio (earlier-year lots, option exercises, corporate actions and crypto are only partly supported yet); it will be improved based on feedback. Not tax advice. MIT licence.

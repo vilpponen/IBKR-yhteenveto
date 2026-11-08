@@ -3,6 +3,13 @@
 Uusimmat ensin. Yksi otsikko päivää kohden; saman päivän julkaisut ovat sen alla. Jokainen julkaisu on yhdistetty
 `main`-haaraan pull requestina; demo osoitteessa https://ibkr.arxsavonum.com päivitetään julkaisun jälkeen.
 
+## Tulossa (dev)
+
+**Muutettu**
+- README: huomautus, kenelle työkalu sopii nyt (aktiivinen kaupankävijä, salkku tyhjä vuoden alussa) ja mitkä
+  tilanteet ovat vielä rajallisesti tuettuja.
+- Muutosloki: yksi otsikko päivää kohden.
+
 ## 2026-11-08
 
 ### CFD-korjaus ja README-sisällysluettelo ([#6](https://github.com/vilpponen/IBKR-yhteenveto/pull/6))
