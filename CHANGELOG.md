@@ -16,6 +16,12 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
 - Versionumero: näkyy sovelluksen otsikossa ja alatunnisteessa, Excel-työkirjassa (Asetukset ja Muistio) ja
   komentorivillä (`--version`). Muutoslokin aiemmille julkaisuille lisätty versiot 0.1.0–0.8.0.
 
+**Korjattu**
+- PDF-raportin lukeminen vei suurilla raporteilla gigatavuja muistia (sivut jäivät välimuistiin), jolloin palvelin
+  keskeytti käsittelyn ja demo näytti virheen "Unexpected token '<' … is not valid JSON". Nyt sivu vapautetaan heti
+  luvun jälkeen: muistinkäyttö noin 3 Gt → noin 0,1 Gt. Luvut eivät muutu.
+- Jos palvelin palauttaa virhesivun, sovellus näyttää selkeän suomenkielisen virheilmoituksen.
+
 ### 0.8.0 — Vuoden alun positiot ja toteutetut optiot ([#7](https://github.com/vilpponen/IBKR-yhteenveto/pull/7))
 
 **Uutta**

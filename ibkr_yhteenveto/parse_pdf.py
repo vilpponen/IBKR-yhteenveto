@@ -46,6 +46,7 @@ def _page_streams(pdf) -> list[str]:
             out += left.splitlines() + right.splitlines()
         else:
             out += (page.extract_text() or "").splitlines()
+        page.close()   # release the page's parsed objects: otherwise memory grows with every page (GBs per statement)
     return [l.strip() for l in out if l.strip() and not NOISE.match(l.strip())]
 
 
@@ -69,7 +70,9 @@ def parse_pdf(path: str | Path | bytes, name: str | None = None) -> Statement:
         src, name = str(path), name or Path(path).name
     st = Statement(source_files=[name])
     with pdfplumber.open(src) as pdf:
-        first = pdf.pages[0].extract_text() or ""
+        p0 = pdf.pages[0]
+        first = p0.extract_text() or ""
+        p0.close()
         lines = _page_streams(pdf)
     head = first.splitlines()
     st.title = next((h.strip() for h in head if h.strip() and h.strip() != "Help"), "")
