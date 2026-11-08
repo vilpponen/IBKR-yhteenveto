@@ -216,8 +216,19 @@ document.querySelectorAll("input,select").forEach(el => el.addEventListener("cha
 
 // ---------- API
 async function api(path, body){
-  const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
-  const j = await r.json(); if(!r.ok || j.error) throw new Error(j.error || r.statusText); return j;
+  let r;
+  try{ r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)}); }
+  catch(e){ throw new Error("Palvelimeen ei saatu yhteyttä. Tarkista verkkoyhteys ja yritä uudelleen."); }
+  let j = null;
+  try{ j = await r.json(); }
+  catch(e){   // not JSON: an error page from a proxy (e.g. nginx 502/504/413) instead of the app's own reply
+    const why = {413: "Tiedostot ovat liian suuria palvelimelle.",
+                 502: "Palvelin keskeytti käsittelyn (esim. muisti loppui).",
+                 503: "Palvelin ei ole juuri nyt käytettävissä.",
+                 504: "Käsittely kesti liian kauan (aikakatkaisu)."}[r.status] || "Palvelin palautti odottamattoman vastauksen.";
+    throw new Error(`${why} (HTTP ${r.status}) Yritä uudelleen; jos virhe toistuu, aja sovellus omalla koneellasi tai kerro siitä palautekanavassa.`);
+  }
+  if(!r.ok || j.error) throw new Error(j.error || r.statusText); return j;
 }
 function busy(on, text){ $("#ovtext").textContent = text || "Luetaan raportteja… (PDF voi kestää 30–60 s)"; $("#overlay").classList.toggle("on", on); }
 function showErr(msg){ const e=$("#err1"); e.textContent = msg || ""; e.classList.toggle("hidden", !msg); }

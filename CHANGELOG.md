@@ -8,6 +8,14 @@ keskimmäinen numero (MINOR) nousee, kun tulee uusi toiminto tai **mikä tahansa
 lukuja** — jos se on noussut, laske vanha työkirja uudelleen. Viimeinen numero (PATCH) nousee muutoksista, jotka eivät
 koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on merkitty versio, jolla luvut on laskettu.
 
+## Tulossa (dev)
+
+**Korjattu**
+- PDF-raportin lukeminen vei suurilla raporteilla gigatavuja muistia (sivut jäivät välimuistiin), jolloin palvelin
+  keskeytti käsittelyn ja demo näytti virheen "Unexpected token '<' … is not valid JSON". Nyt sivu vapautetaan heti
+  luvun jälkeen: muistinkäyttö noin 3 Gt → noin 0,1 Gt. Luvut eivät muutu.
+- Jos palvelin palauttaa virhesivun, sovellus näyttää selkeän suomenkielisen virheilmoituksen.
+
 ## 2026-11-08
 
 ### 0.9.0 — Versionumero ([#8](https://github.com/vilpponen/IBKR-yhteenveto/pull/8))
