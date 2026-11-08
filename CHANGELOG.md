@@ -3,9 +3,20 @@
 Uusimmat ensin. Yksi otsikko päivää kohden; saman päivän julkaisut ovat sen alla. Jokainen julkaisu on yhdistetty
 `main`-haaraan pull requestina; demo osoitteessa https://ibkr.arxsavonum.com päivitetään julkaisun jälkeen.
 
+**Versionumerot** (`MAJOR.MINOR.PATCH`, 0.x kunnes työkalu on valmis oikeisiin veroilmoituksiin):
+keskimmäinen numero (MINOR) nousee, kun tulee uusi toiminto tai **mikä tahansa muutos, joka voi muuttaa laskettuja
+lukuja** — jos se on noussut, laske vanha työkirja uudelleen. Viimeinen numero (PATCH) nousee muutoksista, jotka eivät
+koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on merkitty versio, jolla luvut on laskettu.
+
+## Tulossa (dev)
+
+**Uutta**
+- Versionumero: näkyy sovelluksessa, Excel-työkirjassa (Asetukset ja Muistio) ja komentorivillä (`--version`).
+  Muutoslokin julkaisuihin lisätty versiot 0.1.0–0.8.0.
+
 ## 2026-11-08
 
-### Vuoden alun positiot ja toteutetut optiot ([#7](https://github.com/vilpponen/IBKR-yhteenveto/pull/7))
+### 0.8.0 — Vuoden alun positiot ja toteutetut optiot ([#7](https://github.com/vilpponen/IBKR-yhteenveto/pull/7))
 
 **Uutta**
 - Yksityishenkilö: **vuoden alun positiot**. Jos tänä vuonna myydään aiemmin ostettuja osakkeita, sovellus kysyy
@@ -28,7 +39,7 @@ Uusimmat ensin. Yksi otsikko päivää kohden; saman päivän julkaisut ovat sen
   tilanteet ovat vielä rajallisesti tuettuja.
 - Muutosloki: yksi otsikko päivää kohden.
 
-### CFD-korjaus ja README-sisällysluettelo ([#6](https://github.com/vilpponen/IBKR-yhteenveto/pull/6))
+### 0.7.0 — CFD-korjaus ja README-sisällysluettelo ([#6](https://github.com/vilpponen/IBKR-yhteenveto/pull/6))
 
 **Korjattu**
 - Yksityishenkilö: CFD-tappioita ei enää vähennetä. CFD-voitot lasketaan kauppakohtaisesti muuksi pääomatuloksi
@@ -40,7 +51,7 @@ Uusimmat ensin. Yksi otsikko päivää kohden; saman päivän julkaisut ovat sen
 
 ## 2026-11-07
 
-### Palautekanavat ([#5](https://github.com/vilpponen/IBKR-yhteenveto/pull/5))
+### 0.6.0 — Palautekanavat ([#5](https://github.com/vilpponen/IBKR-yhteenveto/pull/5))
 
 **Uutta**
 - Palaute ja virheilmoitukset: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues/new/choose)
@@ -49,7 +60,7 @@ Uusimmat ensin. Yksi otsikko päivää kohden; saman päivän julkaisut ovat sen
 - Tietoturvaongelmat voi ilmoittaa yksityisesti ([SECURITY.md](SECURITY.md)).
 - Tämä muutosloki.
 
-### Demo ja ohjeet ([#4](https://github.com/vilpponen/IBKR-yhteenveto/pull/4))
+### 0.5.0 — Demo ja ohjeet ([#4](https://github.com/vilpponen/IBKR-yhteenveto/pull/4))
 
 **Uutta**
 - Demo selaimessa: https://ibkr.arxsavonum.com
@@ -59,7 +70,7 @@ Uusimmat ensin. Yksi otsikko päivää kohden; saman päivän julkaisut ovat sen
 - README kertoo selvästi, mitkä raportit tarvitaan: osakeyhtiölle Activity Statement CSV riittää,
   yksityishenkilölle CSV + PDF (tarkat kauppakohtaiset EUR-määrät). Sama ohje sovelluksen latauslaatikossa.
 
-### Palvelin ei tallenna mitään ([#3](https://github.com/vilpponen/IBKR-yhteenveto/pull/3))
+### 0.4.0 — Palvelin ei tallenna mitään ([#3](https://github.com/vilpponen/IBKR-yhteenveto/pull/3))
 
 **Muutettu**
 - Palvelin ei säilytä mitään: ei istuntoja, ei tiedostoja, ei väliaikaistiedostoja levylle, ei raporttien sisältöä
@@ -69,20 +80,20 @@ Uusimmat ensin. Yksi otsikko päivää kohden; saman päivän julkaisut ovat sen
 **Korjattu**
 - Palvelimen loki kaatui tukemattomilla pyynnöillä (esim. HEAD).
 
-### Windows-asennus ([#2](https://github.com/vilpponen/IBKR-yhteenveto/pull/2))
+### 0.3.0 — Windows-asennus ([#2](https://github.com/vilpponen/IBKR-yhteenveto/pull/2))
 
 **Uutta**
 - Asennus ja päivitys yhdellä PowerShell-komennolla (`irm … install.ps1 | iex`).
 - `run.cmd`: myöhemmin käynnistys kaksoisklikkauksella.
 - Asennuksen automaattitestit Windowsilla (PowerShell 5.1 ja 7) ja macOS:llä.
 
-### macOS-asennus ([#1](https://github.com/vilpponen/IBKR-yhteenveto/pull/1))
+### 0.2.0 — macOS-asennus ([#1](https://github.com/vilpponen/IBKR-yhteenveto/pull/1))
 
 **Uutta**
 - Asennus ja päivitys yhdellä komennolla (`curl … install.sh | bash`) valitsemaasi kansioon.
 - Käyttöönotto-ohjeet ilman gitiä tai GitHub-tunnusta.
 
-### Ensimmäinen versio
+### 0.1.0 — Ensimmäinen versio
 
 **Uutta**
 - **Osakeyhtiö:** kirjanpito (KPL) ilman tasauseriä, alimman arvon periaate, tase IBKR:n NAV:sta ja EVL-verolaskelma (6B).

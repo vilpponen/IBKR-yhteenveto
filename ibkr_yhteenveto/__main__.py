@@ -5,11 +5,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import Settings, build, load, write_workbook
+from . import Settings, __version__, build, load, write_workbook
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="ibkr_yhteenveto", description=__doc__)
+    ap.add_argument("--version", action="version", version=f"IBKR-yhteenveto {__version__}")
     ap.add_argument("files", nargs="+", help="IBKR Activity Statement (CSV/PDF) and/or Realized Summary PDF")
     ap.add_argument("-o", "--out", default=None, help="output .xlsx (default: <account>_<year>_tilinpaatos.xlsx)")
     ap.add_argument("--share-category", default="muu omaisuus", choices=["muu omaisuus", "rahoitusomaisuus"])

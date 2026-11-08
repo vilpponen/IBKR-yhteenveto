@@ -207,9 +207,13 @@ Tietoturvaongelmat ilmoitetaan yksityisesti: katso [SECURITY.md](SECURITY.md).
 
 ## Viimeisimmät muutokset
 
+Sovelluksen versio näkyy otsikossa ja jokaisessa Excel-työkirjassa (`MAJOR.MINOR.PATCH`). Jos keskimmäinen numero on
+noussut työkirjan laskemisen jälkeen, laskentaan on tullut muutoksia — laske uudelleen. Viimeisen numeron muutokset
+eivät koskaan muuta lukuja.
+
 <!-- muutokset:alku -->
-* **2026-11-08** — Vuoden alun positiot ja toteutetut optiot · CFD-korjaus ja README-sisällysluettelo
-* **2026-11-07** — Palautekanavat · Demo ja ohjeet · Palvelin ei tallenna mitään
+* **2026-11-08** — 0.8.0 Vuoden alun positiot ja toteutetut optiot · 0.7.0 CFD-korjaus ja README-sisällysluettelo
+* **2026-11-07** — 0.6.0 Palautekanavat · 0.5.0 Demo ja ohjeet · 0.4.0 Palvelin ei tallenna mitään
 
 Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).
 <!-- muutokset:loppu -->
@@ -237,4 +241,4 @@ Rakenne: `ibkr_yhteenveto/` (parserit, laskenta, Excel), `server.py` (paikalline
 Local tool that turns Interactive Brokers statements (PDF/CSV) into Finnish tax figures: bookkeeping (KPL) and
 the EVL tax bridge for a Finnish limited company, or OmaVero capital-income figures for an individual (FIFO at
 trade-date EUR rates). Runs on `127.0.0.1` with Python's standard-library HTTP server; nothing leaves your machine.
-Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Currently aimed mainly at active traders who start the year with an empty portfolio (earlier-year lots are handled by asking the user per lot or by reading previous years' statements; exercised bought options adjust the shares' cost or sale price; written options, corporate actions and crypto are only partly supported yet); it will be improved based on feedback. Not tax advice. MIT licence.
+Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Versioning: MINOR bumps whenever calculated figures can change, PATCH never changes figures. Currently aimed mainly at active traders who start the year with an empty portfolio (earlier-year lots are handled by asking the user per lot or by reading previous years' statements; exercised bought options adjust the shares' cost or sale price; written options, corporate actions and crypto are only partly supported yet); it will be improved based on feedback. Not tax advice. MIT licence.

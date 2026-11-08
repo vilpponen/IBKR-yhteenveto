@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ibkr_yhteenveto import load
+from ibkr_yhteenveto import __version__, load
 from ibkr_yhteenveto.books import Settings
 from ibkr_yhteenveto.model import Statement
 from ibkr_yhteenveto.personal import PSettings
@@ -103,7 +103,10 @@ class Handler(BaseHTTPRequestHandler):
         p = (STATIC / rel).resolve()
         if STATIC not in p.parents or not p.is_file():
             return self._json({"error": "not found"}, 404)
-        self._send(200, p.read_bytes(), CONTENT_TYPES.get(p.suffix, "application/octet-stream"))
+        body = p.read_bytes()
+        if p.name == "index.html":   # the page shows the version it was served with
+            body = body.replace(b"__APP_VERSION__", __version__.encode())
+        self._send(200, body, CONTENT_TYPES.get(p.suffix, "application/octet-stream"))
 
     # ---------------------------------------------------------------- POST
     def do_POST(self):
@@ -132,6 +135,7 @@ class Handler(BaseHTTPRequestHandler):
                         evl8a_carryforward=f(o.get("cf")), credit_interest_wht=bool(o.get("int_credit")),
                         etf_symbols={x.strip() for x in str(o.get("etfs", "")).split(",") if x.strip()}))
                 res["xlsx"] = base64.b64encode(xlsx).decode()
+                res["version"] = __version__
                 return self._json(res)
             return self._json({"error": "not found"}, 404)
         except Exception as e:  # report errors to the page instead of a dead request
@@ -152,7 +156,7 @@ def main():
     DEBUG = a.debug
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
     url = f"http://127.0.0.1:{a.port}/"
-    print(f"IBKR-yhteenveto running at {url}  (Ctrl+C to stop)")
+    print(f"IBKR-yhteenveto {__version__} running at {url}  (Ctrl+C to stop)")
     if not a.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

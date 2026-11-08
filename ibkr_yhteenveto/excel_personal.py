@@ -7,6 +7,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment
 from openpyxl.worksheet.datavalidation import DataValidation
 
+from .version import __version__
 from .xlsx_mem import workbook_bytes
 
 from .books import _is_div_wht, _is_pil, wht_country
@@ -52,7 +53,8 @@ def write_personal_workbook(b: PBooks) -> bytes:
     inp("Payment in lieu -korvauksen veronalainen osuus", s.pil_taxable_share, "100 % (muu pääomatulo)", "pilsh", PCT)
     inp("Aiempien vuosien vahvistetut luovutustappiot (€)", s.loss_carryforward, "Verotuspäätöksestä, 5 v", "cf")
     asx.blank()
-    asx.note("Sininen = syöte raportista, musta = kaava, vihreä = linkki. " + f"Generoitu {date.today().isoformat()}")
+    asx.note("Sininen = syöte raportista, musta = kaava, vihreä = linkki. "
+             f"Laskettu versiolla IBKR-yhteenveto {__version__} · {date.today().isoformat()}")
 
     # ---------------------------------------------------------------- Luovutukset (FIFO)
     lu.title("Arvopapereiden luovutukset hankintaerittäin (FIFO)",
@@ -305,6 +307,9 @@ def write_personal_workbook(b: PBooks) -> bytes:
     mu.title("Muistio", sub)
     mu.header(["Aihe", "Selitys"])
     for k, t in [
+        ("Versio", f"Laskettu versiolla IBKR-yhteenveto {__version__} ({date.today().isoformat()}). Jos versionumeron "
+                   "keskimmäinen osa on myöhemmin noussut (esim. 0.8 → 0.9), laskentaan on tullut muutoksia — laske "
+                   "uudelleen. Muutokset: CHANGELOG.md."),
         ("FIFO", "Verohallinto edellyttää, että samanlajiset arvopaperit katsotaan myydyiksi hankintajärjestyksessä (FIFO) "
                  "arvo-osuustilikohtaisesti. Tämä työkirja laskee FIFO:n itse IBKR:n kauppariveistä."),
         ("Vuoden alun positiot", "Erät, jotka on avattu ennen laskentakautta, käsitellään käyttäjän valinnan mukaan: "
