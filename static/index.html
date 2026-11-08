@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>IBKR-yhteenveto</title>
+<title>IBKR-yhteenveto __APP_VERSION__</title>
 <style>
   :root{
     --bg:#F4F1EA; --panel:#FFFFFF; --ink:#1C1A14; --muted:#6B675C; --line:#E2DDD1;
@@ -81,6 +81,7 @@
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
   footer{margin-top:36px;color:var(--muted);font-size:12px}
   header a,footer a{color:var(--accent);text-decoration:none} header a:hover,footer a:hover{text-decoration:underline}
+  header h1 .ver{font-size:13px;font-weight:600;color:var(--muted);vertical-align:middle;margin-left:6px}
   .repo{float:right;font-size:13px;margin-top:10px}
   @media (max-width:560px){ .repo{float:none;display:block;margin:0 0 6px} }
 </style>
@@ -89,7 +90,7 @@
 <div class="wrap">
   <header>
     <a class="repo" href="https://github.com/vilpponen/IBKR-yhteenveto" target="_blank" rel="noopener">Lähdekoodi GitHubissa ↗</a>
-    <h1>IBKR-yhteenveto</h1>
+    <h1>IBKR-yhteenveto <span class="ver">__APP_VERSION__</span></h1>
     <p>Interactive Brokersin vuosiraportit Suomen verotukseen. <span id="privacy">Kaikki lasketaan tällä koneella — mitään ei lähetetä minnekään.</span></p>
   </header>
   <nav class="stepper"><span id="s1" class="on"><b>1</b>Raportit &amp; asetukset</span><span id="s2"><b>2</b>Tulokset</span></nav>
@@ -177,7 +178,7 @@
     <div id="notes"></div>
   </section>
 
-  <footer>IBKR-yhteenveto · <a href="https://github.com/vilpponen/IBKR-yhteenveto" target="_blank" rel="noopener">avoin lähdekoodi (GitHub, MIT)</a> · ei veroneuvontaa — käy luvut läpi kirjanpitäjän kanssa ennen veroilmoitusta.<br>Palaute ja virheilmoitukset: <a href="https://github.com/vilpponen/IBKR-yhteenveto/issues/new/choose" target="_blank" rel="noopener">GitHub Issues</a> tai <a href="mailto:info@arxsavonum.com?subject=IBKR-yhteenveto%20-%20palaute">info@arxsavonum.com</a> — älä liitä oikeita raportteja, tilinumeroita tai summia.</footer>
+  <footer>IBKR-yhteenveto __APP_VERSION__ (<a href="https://github.com/vilpponen/IBKR-yhteenveto/blob/main/CHANGELOG.md" target="_blank" rel="noopener">muutokset</a>) · <a href="https://github.com/vilpponen/IBKR-yhteenveto" target="_blank" rel="noopener">avoin lähdekoodi (GitHub, MIT)</a> · ei veroneuvontaa — käy luvut läpi kirjanpitäjän kanssa ennen veroilmoitusta.<br>Palaute ja virheilmoitukset: <a href="https://github.com/vilpponen/IBKR-yhteenveto/issues/new/choose" target="_blank" rel="noopener">GitHub Issues</a> tai <a href="mailto:info@arxsavonum.com?subject=IBKR-yhteenveto%20-%20palaute">info@arxsavonum.com</a> — älä liitä oikeita raportteja, tilinumeroita tai summia.</footer>
 </div>
 <div id="overlay" class="overlay"><div><span class="spin"></span><span id="ovtext">Luetaan raportteja…</span></div></div>
 

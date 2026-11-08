@@ -38,17 +38,27 @@ def test_grouped_by_date():
     assert rs.releases(changelog) == [("2026-01-02", "C ([#3](u))"), ("2026-01-02", "B ([#2](u))"), ("2026-01-01", "A ([#1](u))")]
     block = rs.expected_block(changelog)
     assert "* **2026-01-02** — C · B\n* **2026-01-01** — A" in block and "Ei julkaistu" not in block
+    assert rs.plain("1.2.3 — C ([#3](u))") == "1.2.3 C"
 
 
 def test_mismatch_detected():
     changelog = "## Tulossa (dev)\n\n## 2026-01-02\n\n### B\n\n## 2026-01-01\n\n### A\n"
     readme = f"## Viimeisimmät muutokset\n{rs.START}\n* **2026-01-01** — A\n{rs.END}\n[x](#puuttuu)\n"
-    errs = rs.problems(readme, changelog)
+    errs = rs.problems(readme, changelog, check_app_version=False)
     assert any("differs" in e for e in errs) and any("#puuttuu" in e for e in errs)
 
 
 def test_duplicate_dates_and_old_format_rejected():
-    errs = rs.problems("", "## 2026-01-02\n\n### B\n\n## 2026-01-02\n\n### A\n")
+    errs = rs.problems("", "## 2026-01-02\n\n### 0.2.0 — B\n\n## 2026-01-02\n\n### 0.1.0 — A\n", False)
     assert any("appears more than once" in e for e in errs)
-    errs = rs.problems("", "## 2026-01-02 — B\n")
+    errs = rs.problems("", "## 2026-01-02 — B\n", False)
     assert any("use '## date'" in e for e in errs)
+
+
+def test_versions_in_changelog():
+    from ibkr_yhteenveto import __version__
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert rs.all_releases(changelog)[0].startswith(__version__ + " — ")
+    assert rs.plain("0.8.0 — Demo ([#7](https://x/pull/7))") == "0.8.0 Demo"
+    errs = rs.problems("", "## 2026-01-02\n\n### 0.1.0 — B\n\n### 0.2.0 — A\n\n### C\n", False)
+    assert any("newest first" in e for e in errs) and any("has no version" in e for e in errs)

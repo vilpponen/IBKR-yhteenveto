@@ -6,8 +6,9 @@ from pathlib import Path
 from .books import Books, Settings, build
 from .excel import write_workbook
 from .model import Statement
+from .version import __version__
 
-__all__ = ["load", "build", "write_workbook", "Settings", "Books", "Statement"]
+__all__ = ["__version__", "load", "build", "write_workbook", "Settings", "Books", "Statement"]
 
 
 def load(paths: list[str | Path | tuple[str, bytes]]) -> Statement:

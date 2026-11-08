@@ -4,11 +4,12 @@
     python scripts/readme_sync.py           # check (exit 1 on mismatch) — also run by tests/test_readme.py in CI
     python scripts/readme_sync.py --write   # rewrite README's "Viimeisimmät muutokset" list from CHANGELOG.md
 
-CHANGELOG.md has one "## YYYY-MM-DD" heading per date; each release is a "### Title ([#N](…))" under it (the
-"## Tulossa (dev)" section is not a release). A date must not appear twice.
+CHANGELOG.md has one "## YYYY-MM-DD" heading per date; each release is a "### X.Y.Z — Title ([#N](…))" under it
+(the "## Tulossa (dev)" section is not a release). A date must not appear twice, release versions must be strictly
+descending, and the newest one must equal ibkr_yhteenveto/version.py's __version__.
 
 README's "Viimeisimmät muutokset" (between <!-- muutokset:alku --> and <!-- muutokset:loppu -->) shows the 5 newest
-releases, one line per date: "* **date** — title · title" (no PR links). Every in-page link (#anchor) in README must
+releases, one line per date: "* **date** — 0.8.0 Title · 0.7.0 Title" (no PR links). Every in-page link (#anchor) in README must
 point to a heading, using GitHub's anchor rules (lowercase, spaces → '-', punctuation dropped, ä/ö kept).
 """
 from __future__ import annotations
@@ -68,9 +69,28 @@ def releases(changelog: str) -> list[tuple[str, str]]:
     return out[:N]
 
 
+VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+) — ")
+
+
 def plain(heading: str) -> str:
-    """Release heading without its PR link: '2026-11-07 — Demo ([#4](…))' -> '2026-11-07 — Demo'."""
-    return re.sub(r"\s*\(\[#\d+\]\([^)]*\)\)\s*$", "", heading).strip()
+    """Release heading for README: no PR link, version without the dash ('0.8.0 — Demo ([#4](…))' -> '0.8.0 Demo')."""
+    h = re.sub(r"\s*\(\[#\d+\]\([^)]*\)\)\s*$", "", heading).strip()
+    return VERSION_RE.sub(lambda m: f"{m.group(1)}.{m.group(2)}.{m.group(3)} ", h)
+
+
+def app_version() -> str:
+    m = re.search(r'__version__\s*=\s*"([^"]+)"', (ROOT / "ibkr_yhteenveto" / "version.py").read_text(encoding="utf-8"))
+    return m.group(1) if m else ""
+
+
+def all_releases(changelog: str) -> list[str]:
+    out, date = [], None
+    for line in changelog.splitlines():
+        if line.startswith("## "):
+            date = DATE_RE.match(line)
+        elif line.startswith("### ") and date:
+            out.append(line[4:].strip())
+    return out
 
 
 def expected_block(changelog: str) -> str:
@@ -81,13 +101,25 @@ def expected_block(changelog: str) -> str:
     return "\n".join([START, *lines, "", "Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).", END])
 
 
-def problems(readme: str, changelog: str) -> list[str]:
+def problems(readme: str, changelog: str, check_app_version: bool = True) -> list[str]:
     errs = []
     ds = dates(changelog)
     for d in sorted({d for d in ds if ds.count(d) > 1}):
         errs.append(f"CHANGELOG: date {d} appears more than once — put all releases of a day under one '## {d}'")
     if ds != sorted(ds, reverse=True):
         errs.append("CHANGELOG: date headings must be newest first")
+    vers = []
+    for h in all_releases(changelog):
+        m = VERSION_RE.match(h)
+        if not m:
+            errs.append(f"CHANGELOG: release '{h}' has no version — use '### X.Y.Z — Otsikko'")
+        else:
+            vers.append(tuple(int(x) for x in m.groups()))
+    if vers != sorted(set(vers), reverse=True):
+        errs.append("CHANGELOG: release versions must be unique and newest first")
+    if vers and check_app_version and ".".join(map(str, vers[0])) != app_version():
+        errs.append(f"CHANGELOG: newest release {'.'.join(map(str, vers[0]))} != ibkr_yhteenveto/version.py "
+                    f"__version__ {app_version()} — bump the version in the release commit")
     for line in changelog.splitlines():
         if re.match(r"^## \d{4}-\d{2}-\d{2}\s+\S", line):
             errs.append(f"CHANGELOG: '{line}' — use '## date' and put the release title under it as '### title'")

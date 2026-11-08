@@ -13,6 +13,7 @@ from .xlsx_mem import workbook_bytes
 
 from .books import Books, _is_div_wht, _is_pil, classify_transfers, wht_country
 from .parse_common import CFD_CLASSES
+from .version import __version__
 
 FONT = "Arial"
 NUM = '#,##0.00;-#,##0.00;"–"'
@@ -148,7 +149,7 @@ def write_workbook(b: Books) -> bytes:
         "intcredit", validation='"Kyllä,Ei"')
     asx.blank()
     asx.note("Väri-koodit: sininen = syöte (IBKR-raportista tai käyttäjältä), musta = kaava, vihreä = linkki toiselle välilehdelle.")
-    asx.note(f"Generoitu {date.today().isoformat()} · IBKR-yhteenveto")
+    asx.note(f"Laskettu versiolla IBKR-yhteenveto {__version__} · {date.today().isoformat()}")
 
     # ================================================================ Talletukset & nostot
     dw.title("Talletukset & nostot", hdr_sub)
@@ -583,7 +584,8 @@ def write_workbook(b: Books) -> bytes:
         ("6. Omaisuuslaji", f"Osakkeet merkitty: '{s.share_category}'. Vaikuttaa arvonalentumisten vähennyskelpoisuuteen ja "
          "EVL 8 a §:n tappiorajoitukseen. Futuurit/ETF:t = muu omaisuus (Verohallinnon ohje)."),
         ("7. Siirrot", "Talletukset ja nostot ovat siirtoja yhtiön oman pankkitilin ja IBKR-tilin välillä (tili 1900, vastakirjaus pankkitilille pääkirjassa). Ei tulos- eikä verovaikutusta. IBKR:n teksti 'Disbursement Initiated by …' tarkoittaa vain nostopyynnön tekijää."),
-        ("8. Dokumentaatio", "Säilytä: IBKR Activity Statement (PDF+CSV), Realized Summary, lähdeverotodistukset, tämä työkirja."),
+        ("8. Dokumentaatio", "Säilytä: IBKR Activity Statement (PDF+CSV), Realized Summary, lähdeverotodistukset, tämä työkirja. "
+         f"Laskettu versiolla IBKR-yhteenveto {__version__} ({date.today().isoformat()}); muutokset: CHANGELOG.md."),
     ]
     if any(r.asset_class in CFD_CLASSES for r in b.st.ru):
         notes.append(("9. CFD:t", "CFD-kauppojen voitot ja tappiot on käsitelty kuten muut johdannaiset (veronalaisia / "
