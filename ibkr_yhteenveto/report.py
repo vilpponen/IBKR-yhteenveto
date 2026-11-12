@@ -146,8 +146,10 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
             "Arvopaperit symboleittain": _t(
                 ["Symboli", "Luovutushinnat", "Hankintamenot", "Voitot", "Tappiot", "Netto (FIFO)", "IBKR R&U"],
                 [[k, *x, x[2] + x[3], pb.ru_by_symbol.get(k, 0.0)] for k, x in sorted(agg.items())], [1, 2, 3, 4, 5, 6]),
-            "Johdannaiset": _t(["Luokka", "Symboli", "Voitot", "Tappiot", "Netto"],
-                               [[r.asset_class, r.symbol, r.profit, r.loss, r.realized] for r in pb.derivatives], [2, 3, 4]),
+            "Johdannaiset": _t(["Luokka", "Symboli", "Voitot", "Tappiot", "Netto", "Markkinapaikka", "Tappio vähennyskelpoinen"],
+                               [[r.asset_class, r.symbol, r.profit, r.loss, r.realized, pb.der_exch.get(r.symbol) or "tuntematon",
+                                 "Ei (ei säännelty markkina)" if r.symbol in pb.nondeductible else "Kyllä"]
+                                for r in pb.derivatives], [2, 3, 4]),
             "CFD:t": _t(["Päivä", "Symboli", "Tulos", "Käsittely"],
                         [[x["date"], x["symbol"], x["eur"],
                           "Veronalainen (muu pääomatulo)" if x["eur"] > 0 else "Ei huomioida (vähennyskelvoton)"]

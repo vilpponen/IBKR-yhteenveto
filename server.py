@@ -126,6 +126,7 @@ class Handler(BaseHTTPRequestHandler):
                         name=o.get("name", ""), loss_carryforward=f(o.get("loss_cf")),
                         include_fx=bool(o.get("include_fx")), credit_interest_wht=bool(o.get("int_credit")),
                         use_presumption=bool(o.get("use_presumption", True)),
+                        extra_regulated=str(o.get("extra_regulated", ""))[:500],
                         opening_choices=o.get("opening_choices") if isinstance(o.get("opening_choices"), dict) else {}))
                 else:
                     ftt = f(o.get("ftt"))

@@ -12,7 +12,7 @@ from .xlsx_mem import workbook_bytes
 
 from .books import _is_div_wht, _is_pil, wht_country
 from .excel import FILL_KEY, NUM, PCT, Sheet
-from .personal import SOURCES, PBooks, _is_cfd_cost
+from .personal import SOURCES, PBooks, _fi, _is_cfd_cost
 
 
 def write_personal_workbook(b: PBooks) -> bytes:
@@ -152,14 +152,21 @@ def write_personal_workbook(b: PBooks) -> bytes:
     de.title("Johdannaiset", [sub, "Futuurit ja optiot: IBKR Realized & Unrealized Performance Summary (realisoidut, EUR).",
                                   "CFD:t erikseen alla: muuta pääomatuloa, tappiot vähennyskelvottomia."])
     de.section("FUTUURIT JA OPTIOT (luovutusvoitot ja -tappiot, 9A)", 6)
-    de.header(["Luokka", "Symboli", "Voitot", "Tappiot", "Netto", "Huom."])
+    de.header(["Luokka", "Symboli", "Voitot", "Vähennyskelpoiset tappiot", "Netto", "Markkinapaikka / huom."])
     r0 = de.r
     for r_ in b.derivatives:
         r = de.r
-        de.row([r_.asset_class, r_.symbol, r_.profit, r_.loss, f"=C{r}+D{r}"], ["in", "in", "in", "in", "f"])
+        ex = b.der_exch.get(r_.symbol, "")
+        nd = r_.symbol in b.nondeductible
+        note = (ex or "tuntematon") + (f" — ei säännelty: tappio {_fi(-r_.loss)} € vähennyskelvoton" if nd and r_.loss else "")
+        de.row([r_.asset_class, r_.symbol, r_.profit, 0.0 if nd else r_.loss, f"=C{r}+D{r}", note],
+               ["in", "in", "in", "in", "f", "t"])
     r1 = max(de.r - 1, r0)
     rt = de.row(["Yhteensä", None, f"=SUM(C{r0}:C{r1})" if b.derivatives else 0, f"=SUM(D{r0}:D{r1})" if b.derivatives else 0,
                  f"=C{de.r}+D{de.r}"], bold=True, total=True)
+    if b.v.get("der_losses_nondeductible"):
+        de.row(["Vähennyskelvottomat tappiot (ei mukana)", None, None, b.v["der_losses_nondeductible"], None,
+                "Ei säännelty tai rinnastettava markkina (Vero 48914)"], ["t", None, None, "in", None, "t"])
     ref.update(DG=de.q(f"C{rt}"), DL=de.q(f"D{rt}"))
     de.blank()
     fx = [x for x in st.ru if x.asset_class == "Forex"]
@@ -356,6 +363,13 @@ def write_personal_workbook(b: PBooks) -> bytes:
                                   "saadaan CSV:n toimeksiantoriveiltä."),
         ("Johdannaiset", "Futuurit ja optiot: voitot ja tappiot IBKR:n realisoiduista tuloksista. Tappiot vähennetään "
                          "luovutusvoitoista ja muista pääomatuloista (5 v)."),
+        ("Johdannaisten markkinapaikka", "Futuurien ja vakioitujen optioiden tappiot ovat henkilöllä vähennyskelpoisia "
+                                         "vain, kun kauppa käydään säännellyllä tai siihen rinnastettavalla markkinalla "
+                                         "(Vero 48914). Oletuksena hyväksytään ETA:n ja Yhdysvaltain pörssit (esim. CME, "
+                                         "CBOT, NYMEX, COMEX, CBOE, EUREX); KVL 1/2021 rinnasti Yhdysvaltain liittovaltion "
+                                         "viranomaisen valvomat markkinapaikat — se on yksittäisen hakijan ennakkoratkaisu. "
+                                         "Markkinapaikka luetaan CSV:n Financial Instrument Information -osiosta (Listing "
+                                         "Exch). Muiden markkinapaikkojen tappiot jätetään vähentämättä; voitot verotetaan."),
         ("Optioiden toteutus", "Kun ostettu osto-optio toteutetaan, maksettu preemio kaupankäyntikuluineen kuuluu "
                                "osakkeiden hankintamenoon (KHO 2012:69); ostetun myyntioption preemio vähennetään "
                                "osakkeiden luovutushinnasta. Preemio muunnetaan euroiksi option ostopäivän kurssilla. "

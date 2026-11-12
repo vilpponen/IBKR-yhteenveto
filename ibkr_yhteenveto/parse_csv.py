@@ -244,6 +244,10 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
     for d in data("Financial Instrument Information"):
         if (d.get("Type") or "").upper() in ("ETF", "ETN", "ETC", "FUND"):
             st.etf_symbols.add(d.get("Symbol", ""))
+    for d in data("Financial Instrument Information"):
+        ex = (d.get("Listing Exch") or "").strip()
+        if ex and d.get("Symbol"):
+            st.listing_exch[d["Symbol"].strip()] = ex
     return st
 
 

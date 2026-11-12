@@ -18,6 +18,9 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
   rahastoanti jakavat hankintamenon uusille osakkeille, ja omistusaika säilyy. Yhdistelyssä murto-osista maksettu
   käteinen käsitellään luovutuksena. Jos tapahtuman tyyppiä ei tunnisteta, osakkeen laskenta keskeytyy ja tulos
   merkitään keskeneräiseksi (ei hiljaista virhetäsmäytystä).
+- Yksityishenkilö: **johdannaisten markkinapaikka**. Futuurien ja optioiden tappiot vähennetään vain, kun
+  markkinapaikka on säännelty tai siihen rinnastettava (oletuksena ETA:n ja Yhdysvaltain pörssit, listaa voi täydentää
+  asetuksissa). Muiden markkinapaikkojen tappiot näytetään vähennyskelvottomina; voitot verotetaan.
 
 **Muutettu**
 - OmaVero-kentät: luovutushinnat ovat bruttomyyntihintoja ja myyntiprovisiot ovat kuluissa (aiemmin myyntiprovisio

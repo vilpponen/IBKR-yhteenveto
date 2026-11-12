@@ -163,7 +163,8 @@ kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä rapor
 
 * **Arvopaperit (9A):** FIFO hankintaerittäin IBKR:n kauppakohtaisista EUR-määristä — myyntihinta myyntipäivän ja
   hankintameno ostopäivän kurssilla (Verohallinnon tapa). Luovutushinnat, hankintamenot, voitot ja tappiot.
-* **Johdannaiset** (futuurit, optiot): voitot ja tappiot.
+* **Johdannaiset** (futuurit, optiot): voitot ja tappiot. Tappiot vähennetään vain säännellyiltä tai niihin
+  rinnastettavilta markkinoilta (oletuksena ETA:n ja Yhdysvaltain pörssit; markkinapaikka CSV:stä).
 * **Optioiden toteutus:** ostetun osto-option preemio lisätään saatujen osakkeiden hankintamenoon ja ostetun
   myyntioption preemio vähennetään osakkeiden luovutushinnasta (KHO 2012:69). Tarvitsee Activity Statement CSV:n.
 * **CFD:t:** voitot kauppakohtaisesti muuna pääomatulona; tappiot eivät ole vähennyskelpoisia, joten niitä ei

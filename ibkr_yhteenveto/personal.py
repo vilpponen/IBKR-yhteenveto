@@ -26,6 +26,17 @@ def _fi(x: float, d: int = 2) -> str:
     x = 0.0 if abs(x) < 0.5 * 10 ** -d else x
     return f"{x:,.{d}f}".replace(",", "\u00a0").replace(".", ",")
 
+# Regulated markets (or equivalent) for futures and standardised options: losses are deductible only there
+# (Vero 48914; KVL 1/2021: US exchanges supervised by a federal authority are equivalent). EEA + US by default.
+REGULATED_EXCHANGES = {
+    # United States (CFTC / SEC supervised)
+    "CME", "CBOT", "NYMEX", "COMEX", "CFE", "CBOE", "CBOE2", "C2", "ICEUS", "NYBOT", "ISE", "PHLX", "AMEX", "ARCA",
+    "BOX", "MIAX", "EMERALD", "PEARL", "GEMINI", "MERCURY", "EDGX", "BATS", "NASDAQOM", "NASDAQBX", "PSE", "NYSE",
+    "NASDAQ",
+    # EEA
+    "EUREX", "DTB", "IDEM", "MEFFRV", "MEFF", "MONEP", "MATIF", "OMS", "OMH", "OMC", "OSE.NOR", "FTA", "EOE",
+    "ENEXT.BE", "BELFOX", "WSE", "ATHEX",
+}
 DERIVATIVE_CLASSES = {"Futures", "Equity and Index Options", "Options", "Warrants", "Futures Options",
                       "Options On Futures", "Structured Products"}
 
@@ -46,6 +57,7 @@ class PSettings:
     div_taxable_share: float = 0.85    # listed company dividends
     pil_taxable_share: float = 1.0     # payment in lieu (SYEP) — ordinary capital income
     credit_interest_wht: bool = False
+    extra_regulated: str = ""          # user's additional regulated/equivalent exchanges, comma-separated
     use_presumption: bool = True       # hankintameno-olettama per lot when it gives the lower gain (Vero 48262 §4.2.2)
     # year-start positions: {symbol: {"method": "lots"|"manual"|"olettama"|"ibkr",
     #   "lots": [{"date": "YYYY-MM-DD", "qty": n, "cost_eur": x} or {"date", "qty", "olettama": true}]}}
@@ -118,6 +130,8 @@ class PBooks:
     option_events: list[dict] = field(default_factory=list)  # exercises / assignments and how the premium was used
     ca_events: list[dict] = field(default_factory=list)      # corporate actions applied to share lots
     blocked: list[str] = field(default_factory=list)         # symbols whose FIFO stopped at an unknown corporate action
+    der_exch: dict[str, str] = field(default_factory=dict)  # derivative symbol -> listing exchange ('' unknown)
+    nondeductible: set = field(default_factory=set)          # derivative symbols off regulated markets
     end_lots: list[dict] = field(default_factory=list)   # open lots at period end (export for next year)
     preliminary: bool = False                             # some year-start lot has no user decision
 
@@ -599,8 +613,22 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     v["ru_sec_net"] = sum(b.ru_by_symbol.values())
 
     b.derivatives = [r for r in st.ru if r.asset_class in DERIVATIVE_CLASSES]
+    allowed = REGULATED_EXCHANGES | {x.strip().upper() for x in s.extra_regulated.split(",") if x.strip()}
+    b.der_exch = {r.symbol: st.listing_exch.get(r.symbol, "") for r in b.derivatives}
+    nondeductible = [r for r in b.derivatives if b.der_exch[r.symbol] and b.der_exch[r.symbol].upper() not in allowed]
+    unknown = sorted({r.symbol for r in b.derivatives if not b.der_exch[r.symbol] and r.loss})
+    b.nondeductible = {r.symbol for r in nondeductible}
     v["der_gains"] = sum(r.profit for r in b.derivatives)
-    v["der_losses"] = sum(r.loss for r in b.derivatives)
+    v["der_losses"] = sum(r.loss for r in b.derivatives if r.symbol not in b.nondeductible)
+    v["der_losses_nondeductible"] = sum(r.loss for r in nondeductible)
+    if nondeductible and v["der_losses_nondeductible"]:
+        b.warnings.append("Johdannaisia muulla kuin säännellyllä markkinalla (" + ", ".join(sorted(
+            {f"{r.symbol} @ {b.der_exch[r.symbol]}" for r in nondeductible})) + "): tappiot "
+            f"{_fi(-v['der_losses_nondeductible'])} € eivät ole vähennyskelpoisia (Vero 48914). Lisää markkinapaikka "
+            "asetuksiin, jos se on säännelty tai siihen rinnastettava.")
+    if unknown:
+        b.warnings.append("Markkinapaikka tuntematon (" + ", ".join(unknown[:10]) + ("…" if len(unknown) > 10 else "")
+                          + "): tappiot on oletettu vähennyskelpoisiksi. Activity Statement CSV kertoo markkinapaikan.")
     fx = [r for r in st.ru if r.asset_class == "Forex"]
     v["fx_gains"] = sum(r.profit for r in fx) if s.include_fx else 0.0
     v["fx_losses"] = sum(r.loss for r in fx) if s.include_fx else 0.0
@@ -743,6 +771,9 @@ def omavero_fields(b: PBooks) -> list[tuple[str, str, float, str]]:
     ]
     if v["cf_used"]:
         rows.append(("Vähennykset", "Aiempien vuosien vahvistetut luovutustappiot", v["cf_used"], ""))
+    if v.get("der_losses_nondeductible"):
+        rows.append(("Ei ilmoiteta (tieto)", "Vähennyskelvottomat johdannaistappiot (ei säännelty markkina)",
+                     -v["der_losses_nondeductible"], "Vero 48914: tappio vähennyskelpoinen vain säännellyllä markkinalla"))
     if b.cfd_rows or v["cfd_costs_ignored"]:
         rows.append(("Ei ilmoiteta (tieto)", "Vähennyskelvottomat CFD-tappiot (ei huomioida)", -v["cfd_losses_ignored"],
                      "Verohallinto: CFD-tappiota ei huomioida verotuksessa"))

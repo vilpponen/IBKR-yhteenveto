@@ -116,6 +116,8 @@ class Statement:
     stock_legs: list[dict] = field(default_factory=list)
     # realized P/L per closing CFD trade (CSV Trades): {"date","symbol","cls","ccy","pl","eur"} — eur None = unconverted
     cfd_trades: list[dict] = field(default_factory=list)
+    # listing exchange per symbol (CSV Financial Instrument Information 'Listing Exch')
+    listing_exch: dict[str, str] = field(default_factory=dict)
     # corporate actions on shares (CSV): {"date","symbol","description","qty","proceeds_eur","ccy"}
     corporate_actions: list[dict] = field(default_factory=list)
     # CSV stock order rows {"date","time","symbol","qty","comm","ccy"} — to give PDF lots their share of the commission
@@ -169,6 +171,7 @@ class Statement:
         st.option_trades = [dict(x) for x in d.get("option_trades", [])]
         st.trade_rows = [dict(x) for x in d.get("trade_rows", [])]
         st.corporate_actions = [dict(x) for x in d.get("corporate_actions", [])]
+        st.listing_exch = dict(d.get("listing_exch", {}))
         st.exercise_rows = [dict(x) for x in d.get("exercise_rows", [])]
         st.history_periods = list(d.get("history_periods", []))
         st.etf_symbols = set(d.get("etf_symbols", []))
@@ -199,6 +202,8 @@ class Statement:
                   "withholding_total_eur", "dividends_total_eur", "deposits_total_eur"):
             if getattr(self, f) is None and getattr(other, f) is not None:
                 setattr(self, f, getattr(other, f))
+        for k, x in other.listing_exch.items():
+            self.listing_exch.setdefault(k, x)
         if not self.commissions_by_class:
             self.commissions_by_class = other.commissions_by_class
         self.etf_symbols |= other.etf_symbols
