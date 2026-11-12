@@ -74,9 +74,9 @@ def test_manual_and_olettama_choices():
     assert (m.buy_date, m.cost, m.result, m.method) == ("2024-05-02", 9000, 6000, "manual")
     old = {"AAA": {"method": "lots", "lots": [{"date": "2014-01-15", "qty": 100, "olettama": True}]}}
     m = build_personal(st, PSettings(opening_choices=old)).matches[0]
-    assert m.cost == pytest.approx(0.4 * 15000) and m.method == "olettama" and m.source.endswith("40 %")
+    assert m.deduction == pytest.approx(0.4 * 15000) and m.method == "olettama" and m.source.endswith("40 %")
     new = {"AAA": {"method": "lots", "lots": [{"date": "2020-01-15", "qty": 100, "olettama": True}]}}
-    assert build_personal(st, PSettings(opening_choices=new)).matches[0].cost == pytest.approx(0.2 * 15000)
+    assert build_personal(st, PSettings(opening_choices=new)).matches[0].deduction == pytest.approx(0.2 * 15000)
 
 
 def test_partial_lots_leave_rest_unresolved():

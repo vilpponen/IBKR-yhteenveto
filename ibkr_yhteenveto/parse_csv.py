@@ -148,13 +148,18 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
             continue
         q, ccy = to_num(d.get("Quantity")), d.get("Currency", "")
         # IBKR Comm/Fee is negative: buy cost = |proceeds + comm| (more), sale price = proceeds + comm (less)
+        comm = abs(to_num(d.get("Comm/Fee")))
         amt = abs(to_num(d.get("Proceeds")) + to_num(d.get("Comm/Fee")))
+        dt = d.get("Date/Time") or ""
+        st.trade_rows.append({"date": dt[:10], "time": dt[12:20].strip(), "symbol": d.get("Symbol", ""), "qty": q,
+                              "comm": comm, "ccy": ccy})
         if ccy == base:
-            st.stock_legs.append({"date": (d.get("Date/Time") or "")[:10], "symbol": d.get("Symbol", ""), "qty": q,
-                                  "ccy": ccy, "eur": amt, "exact": True})
+            st.stock_legs.append({"date": dt[:10], "time": dt[12:20].strip(), "symbol": d.get("Symbol", ""), "qty": q,
+                                  "ccy": ccy, "eur": amt, "comm_eur": comm, "exact": True})
         elif ratio and ratio.get(ccy):
-            st.stock_legs.append({"date": (d.get("Date/Time") or "")[:10], "symbol": d.get("Symbol", ""), "qty": q,
-                                  "ccy": ccy, "eur": amt * abs(ratio[ccy]), "exact": False})
+            st.stock_legs.append({"date": dt[:10], "time": dt[12:20].strip(), "symbol": d.get("Symbol", ""), "qty": q,
+                                  "ccy": ccy, "eur": amt * abs(ratio[ccy]), "comm_eur": comm * abs(ratio[ccy]),
+                                  "exact": False})
 
     st.cfd_trades = _cfd_trades(rows.get("Trades", []), base)
     info = {(d.get("Symbol") or "").strip(): d for d in data("Financial Instrument Information")

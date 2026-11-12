@@ -125,6 +125,7 @@ class Handler(BaseHTTPRequestHandler):
                     res, xlsx = report.personal(st, PSettings(
                         name=o.get("name", ""), loss_carryforward=f(o.get("loss_cf")),
                         include_fx=bool(o.get("include_fx")), credit_interest_wht=bool(o.get("int_credit")),
+                        use_presumption=bool(o.get("use_presumption", True)),
                         opening_choices=o.get("opening_choices") if isinstance(o.get("opening_choices"), dict) else {}))
                 else:
                     ftt = f(o.get("ftt"))

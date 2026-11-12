@@ -66,7 +66,7 @@ def test_exercised_put_premium_reduces_sale_price():
         + t(OPT, "BBB 17JUN26 95 P", "2026-06-17", -1, 0, 0, 0, -150, "C;Ex")
         + t(STK, "BBB", "2026-06-17", -100, 95, 9500, 0, -10000, "C;Ex"))
     (m,) = build_p(data).matches
-    assert (m.proceeds, m.cost, m.result) == (9350, 10000, -650) and m.premium == pytest.approx(150)
+    assert (m.proceeds, m.cost, m.result) == (9500, 10150, -650) and m.premium == pytest.approx(150)   # gross; premium in costs
 
 
 YEAR_START = csv(   # call bought last year: no opening option trade in this statement

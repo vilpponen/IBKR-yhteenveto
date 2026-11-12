@@ -8,6 +8,18 @@ keskimmäinen numero (MINOR) nousee, kun tulee uusi toiminto tai **mikä tahansa
 lukuja** — jos se on noussut, laske vanha työkirja uudelleen. Viimeinen numero (PATCH) nousee muutoksista, jotka eivät
 koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on merkitty versio, jolla luvut on laskettu.
 
+## Tulossa (dev)
+
+**Uutta**
+- Yksityishenkilö: **hankintameno-olettama erittäin** (20 %, 40 % jos omistettu vähintään 10 vuotta). Olettama
+  lasketaan bruttomyyntihinnasta (ennen myyntiprovisiota ja myyntioption preemiota), eikä sen kanssa vähennetä kuluja.
+  Laskelma käyttää sitä, kun se antaa pienemmän voiton; se ei synnytä eikä kasvata tappiota. Valinta asetuksissa.
+
+**Muutettu**
+- OmaVero-kentät: luovutushinnat ovat bruttomyyntihintoja ja myyntiprovisiot ovat kuluissa (aiemmin myyntiprovisio
+  oli vähennetty luovutushinnasta). Luovutusvoitot eivät muutu, ellei olettamaa käytetä.
+- PDF:n kauppakohtaisille riveille myyntiprovisio luetaan CSV:n toimeksiantoriveiltä.
+
 ## 2026-11-08
 
 ### 0.9.0 — Versionumero ([#8](https://github.com/vilpponen/IBKR-yhteenveto/pull/8))

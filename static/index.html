@@ -146,6 +146,8 @@
           <div class="field"><label for="loss_cf">Aiempien vuosien vahvistetut luovutustappiot (EUR)</label>
             <input id="loss_cf" type="number" min="0" step="0.01" value="0">
             <div class="hint">Verotuspäätöksistä — käytettävissä 5 vuotta.</div></div>
+          <label class="check"><input id="use_presumption" type="checkbox" checked> Käytä hankintameno-olettamaa, kun se on
+            edullisempi (20 % / 40 % bruttomyyntihinnasta, valitaan erittäin)</label>
           <details><summary>Lisäasetukset</summary>
             <label class="check"><input id="include_fx" type="checkbox"> Ota IBKR:n Forex-rivi mukaan valuuttojen luovutuksina
               (oletus pois: EUR-tilillä valuuttavaikutus sisältyy jo osakkeiden EUR-hintoihin)</label>
@@ -197,7 +199,7 @@ let choices = {}, choicesKey = "";
 
 // ---------- persist settings (convenience only; never statement data)
 const FIELDS = ["name","share_cat","ftt","wd_open","ug_open","cf","etfs","loss_cf"];
-const CHECKS = ["int_credit_c","int_credit_p","include_fx"];
+const CHECKS = ["int_credit_c","int_credit_p","include_fx","use_presumption"];
 function saveSettings(){ try{ const o={mode:mode()}; FIELDS.forEach(k=>o[k]=$("#"+k).value); CHECKS.forEach(k=>o[k]=$("#"+k).checked);
   localStorage.setItem("ibkr-yhteenveto", JSON.stringify(o)); }catch(e){} }
 function loadSettings(){ try{ const o=JSON.parse(localStorage.getItem("ibkr-yhteenveto")||"{}");
@@ -403,6 +405,7 @@ function settings(){
   if(m === "company") Object.assign(o, {share_cat: $("#share_cat").value, ftt: $("#ftt").value, wd_open: $("#wd_open").value,
     ug_open: $("#ug_open").value, cf: $("#cf").value, etfs: $("#etfs").value, int_credit: $("#int_credit_c").checked});
   else Object.assign(o, {loss_cf: $("#loss_cf").value, include_fx: $("#include_fx").checked, int_credit: $("#int_credit_p").checked,
+    use_presumption: $("#use_presumption").checked,
     opening_choices: openingChoices()});
   return o;
 }

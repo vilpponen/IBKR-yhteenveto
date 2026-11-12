@@ -116,6 +116,8 @@ class Statement:
     stock_legs: list[dict] = field(default_factory=list)
     # realized P/L per closing CFD trade (CSV Trades): {"date","symbol","cls","ccy","pl","eur"} — eur None = unconverted
     cfd_trades: list[dict] = field(default_factory=list)
+    # CSV stock order rows {"date","time","symbol","qty","comm","ccy"} — to give PDF lots their share of the commission
+    trade_rows: list[dict] = field(default_factory=list)
     # option trades (CSV Trades, option classes): {"date","symbol","underlying","right","mult","qty","ccy","code","eur"}
     # eur = premium cash net of commission (paid for buys, received for sells); None = unconverted
     option_trades: list[dict] = field(default_factory=list)
@@ -163,6 +165,7 @@ class Statement:
         st.cfd_trades = [dict(x) for x in d.get("cfd_trades", [])]
         st.history_legs = [dict(x) for x in d.get("history_legs", [])]
         st.option_trades = [dict(x) for x in d.get("option_trades", [])]
+        st.trade_rows = [dict(x) for x in d.get("trade_rows", [])]
         st.exercise_rows = [dict(x) for x in d.get("exercise_rows", [])]
         st.history_periods = list(d.get("history_periods", []))
         st.etf_symbols = set(d.get("etf_symbols", []))
@@ -182,7 +185,7 @@ class Statement:
                 d.setdefault(k, v)
         for f in ("ru", "positions", "forex_balances", "interest", "fees", "withholding",
                   "dividends", "deposits", "transaction_fee_lines", "stock_legs", "cfd_trades",
-                  "option_trades", "exercise_rows"):
+                  "option_trades", "exercise_rows", "trade_rows"):
             if not getattr(self, f) and getattr(other, f):
                 setattr(self, f, getattr(other, f))
         # exact per-trade EUR legs (PDF Forex P/L Details) beat CSV legs converted at an average rate

@@ -301,7 +301,7 @@ def _cash_section(lines, base, warnings, section):
     return out, section_total_eur
 
 
-_FXLEG = re.compile(r"^Stock\s+(-?[\d,]+(?:\.\d+)?)\s+(.+?)\s+(\d{4}-\d{2}-\d{2}),\s*[\d:]+\s+([A-Z]{3})\s+"
+_FXLEG = re.compile(r"^Stock\s+(-?[\d,]+(?:\.\d+)?)\s+(.+?)\s+(\d{4}-\d{2}-\d{2}),\s*([\d:]+)\s+([A-Z]{3})\s+"
                     r"(-?[\d,]*\.?\d+)\s+(-?[\d,]+\.\d+)\s+(-?[\d,]+\.\d+)\s+(-?[\d,]+\.\d+)")
 
 
@@ -312,8 +312,11 @@ def _stock_legs(trade_lines, fx_lines, st):
         m = _FXLEG.match(l)
         if m:
             qty = to_num(m.group(1))
-            st.stock_legs.append({"date": m.group(3), "symbol": m.group(2), "qty": qty, "ccy": m.group(4),
-                                  "eur": abs(to_num(m.group(6))), "exact": True})
+            # net of commission (the lots of one order add up to proceeds + commission); the commission share is
+            # added from the CSV order row in load() when the CSV is also given
+            st.stock_legs.append({"date": m.group(3), "time": m.group(4), "symbol": m.group(2), "qty": qty,
+                                  "ccy": m.group(5), "cash": abs(to_num(m.group(6))),
+                                  "eur": abs(to_num(m.group(7))), "exact": True})
     cls, ccy, date = "", "", ""
     for l in trade_lines:
         if l in ASSET_CLASSES:
@@ -332,5 +335,5 @@ def _stock_legs(trade_lines, fx_lines, st):
             nums = [nums[0], 0.0] + nums[1:]
         if len(nums) >= 6 and label:
             qty, _px, proceeds, comm, _basis, _rl = nums[-6:]
-            st.stock_legs.append({"date": date, "symbol": label, "qty": qty, "ccy": ccy,
+            st.stock_legs.append({"date": date, "symbol": label, "qty": qty, "ccy": ccy, "comm_eur": abs(comm),
                                   "eur": abs(proceeds + comm) if qty < 0 else abs(proceeds) + abs(comm), "exact": True})

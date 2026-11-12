@@ -45,6 +45,7 @@ class PSettings:
     div_taxable_share: float = 0.85    # listed company dividends
     pil_taxable_share: float = 1.0     # payment in lieu (SYEP) — ordinary capital income
     credit_interest_wht: bool = False
+    use_presumption: bool = True       # hankintameno-olettama per lot when it gives the lower gain (Vero 48262 §4.2.2)
     # year-start positions: {symbol: {"method": "lots"|"manual"|"olettama"|"ibkr",
     #   "lots": [{"date": "YYYY-MM-DD", "qty": n, "cost_eur": x} or {"date", "qty", "olettama": true}]}}
     opening_choices: dict = field(default_factory=dict)
@@ -70,21 +71,34 @@ class Match:
     sale_date: str
     buy_date: str
     qty: float
-    proceeds: float      # luovutushinta EUR (net of selling commission)
-    cost: float          # hankintameno EUR (incl. buying commission)
+    proceeds: float      # luovutushinta EUR: GROSS sale price (before selling commission and put-premium deduction)
+    cost: float          # actual hankintameno + kulut EUR: purchase incl. commission, selling commission, put premium
     short: bool = False
     method: str = "fifo"  # key of SOURCES
-    premium: float = 0.0  # option premium EUR included in cost (exercised call) or deducted from proceeds (put)
+    premium: float = 0.0  # option premium EUR included in cost (exercised call or put)
+    presumption_rate: float = 0.0          # 0.2 / 0.4 when hankintameno-olettama may be used, else 0
+    deduction: float | None = None         # what is deducted: cost, or the olettama when it gives the lower gain
+
+    @property
+    def presumption(self) -> float:
+        return self.presumption_rate * self.proceeds
+
+    @property
+    def presumption_used(self) -> bool:
+        return self.deduction is not None and self.presumption_rate > 0 and abs(self.deduction - self.presumption) < 1e-9 \
+            and (self.method == "olettama" or self.presumption > self.cost)
 
     @property
     def source(self) -> str:
+        r = f"{round(self.presumption_rate * 100)} %"
         if self.method == "olettama":
-            return f"Hankintameno-olettama {round(self.cost / self.proceeds * 100) if self.proceeds else 20} %"
-        return SOURCES.get(self.method, self.method)
+            return f"Hankintameno-olettama {r}"
+        base = SOURCES.get(self.method, self.method)
+        return f"{base} · olettama {r}" if self.presumption_used else base
 
     @property
     def result(self) -> float:
-        return self.proceeds - self.cost
+        return self.proceeds - (self.deduction if self.deduction is not None else self.cost)
 
 
 @dataclass
@@ -245,6 +259,7 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
                     prem += sug * ev["unknown_contracts"] / ev["contracts"]
             ev["ibkr_suggestion_eur"] = _ibkr_premium(st, ev, leg)
         ev["premium_eur"] = prem
+        leg.setdefault("eur_orig", leg["eur"])   # cash amount before the premium (olettama uses the gross price)
         if ev["right"] == "C":
             leg["eur"] += prem
             ev["target"] = "Osakkeiden hankintamenoon"
@@ -283,16 +298,17 @@ def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None,
         for d, _, x in legs:
             q, px = x["qty"], x["eur"] / abs(x["qty"]) if x["qty"] else 0.0
             pps = x.get("opt_prem", 0.0) / abs(x["qty"]) if x["qty"] else 0.0
+            # gross sale price per share: before the selling commission and before a put-premium deduction
+            gross = ((x.get("eur_orig", x["eur"]) + (x.get("comm_eur") or 0.0)) / abs(q)) if q else 0.0
             in_period = d >= start
             while abs(q) > 1e-9 and lots and (lots[0][0] > 0) != (q > 0):
                 lot = lots[0]
                 n = min(abs(q), abs(lot[0]))
                 if in_period:
-                    if q < 0:   # selling against long lot
-                        cost = (lot[1] or 0.0) * n
-                        if lot[3] == "olettama":
-                            cost = (0.4 if _ten_years(lot[2], d) else 0.2) * px * n
-                        m = Match(sym, d, lot[2], n, px * n, cost, method=lot[3])
+                    if q < 0:   # selling against long lot: gross price; costs = purchase + (gross − net) of the sale
+                        cost = 0.0 if lot[3] == "olettama" else (lot[1] or 0.0) * n + (gross - px) * n
+                        m = Match(sym, d, lot[2], n, gross * n, cost, method=lot[3],
+                                  presumption_rate=0.4 if _ten_years(lot[2], d) else 0.2)
                     else:       # buying back a short lot
                         m = Match(sym, d, lot[2], n, (lot[1] or 0.0) * n, px * n, short=True, method=lot[3])
                     m.premium = (lot[4] + pps) * n
@@ -327,7 +343,7 @@ def _ibkr_backout(matches: list[Match], ru: dict[str, float]) -> dict[str, float
         op = [m for m in ms if m.method in ("ibkr", "unresolved")]
         if not op:
             continue
-        known = sum(m.result for m in ms if m.method not in ("ibkr", "unresolved"))
+        known = sum(m.proceeds - m.cost for m in ms if m.method not in ("ibkr", "unresolved", "olettama"))
         target = ru.get(sym, 0.0) - known
         tot_qty = sum(m.qty for m in op)
         for m in op:
@@ -338,6 +354,20 @@ def _ibkr_backout(matches: list[Match], ru: dict[str, float]) -> dict[str, float
                 m.cost = m.proceeds - target * share
         out[sym] = sum(m.proceeds if m.short else m.cost for m in op)
     return out
+
+
+def apply_presumption(matches: list[Match], enabled: bool) -> None:
+    """Hankintameno-olettama per lot (Vero 48262 §4.2.2): 20 % (40 % if held ≥ 10 years) of the GROSS sale price,
+    used instead of all actual costs when it gives the lower gain; it never creates or increases a loss."""
+    for m in matches:
+        if m.short or m.presumption_rate <= 0:
+            m.presumption_rate, m.deduction = 0.0, m.cost
+        elif m.method == "olettama":          # the user chose the olettama for a year-start lot
+            m.deduction = m.presumption
+        elif enabled and m.presumption > m.cost:
+            m.deduction = m.presumption
+        else:
+            m.deduction = m.cost
 
 
 def opening_summary(matches: list[Match], backout: dict[str, float]) -> list[dict]:
@@ -415,6 +445,7 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     b.option_events, legs = option_events(st, b.warnings, s.opening_choices)
     b.matches, b.end_lots = fifo_full(st, b.warnings, s.opening_choices, legs)
     backout = _ibkr_backout(b.matches, b.ru_by_symbol)
+    apply_presumption(b.matches, s.use_presumption)
     b.opening = [dict(o, kind="stock") for o in opening_summary(b.matches, backout)]
     b.opening += option_opening(b.option_events, st)
     if st.option_trades and not st.stock_legs:
@@ -433,10 +464,15 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
         b.warnings.append("Erähistoria aiemmista raporteista: " + ", ".join(st.history_periods) + ".")
     M = b.matches
     v["sec_proceeds"] = sum(m.proceeds for m in M)
-    v["sec_cost"] = sum(m.cost for m in M)
+    v["sec_cost"] = sum(m.proceeds - m.result for m in M)   # deductions used: actual costs or olettama
+    v["sec_cost_actual"] = sum(m.cost for m in M)
     v["sec_gains"] = sum(m.result for m in M if m.result > 0)
     v["sec_losses"] = sum(m.result for m in M if m.result < 0)
     v["sec_net"] = v["sec_gains"] + v["sec_losses"]
+    v["sec_net_actual"] = sum(m.proceeds - m.cost for m in M)
+    used = [m for m in M if m.presumption_used]
+    v["presumption_lots"] = float(len(used))
+    v["presumption_benefit"] = sum(m.presumption - m.cost for m in used if m.method != "olettama")
     v["ru_sec_net"] = sum(b.ru_by_symbol.values())
 
     b.derivatives = [r for r in st.ru if r.asset_class in DERIVATIVE_CLASSES]
@@ -456,7 +492,7 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     sec_g, sec_l = v["sec_gains"], v["sec_losses"]
     if v["small_exempt"]:
         sec_g = 0.0
-        if v["sec_cost"] <= s.small_limit:
+        if v["sec_cost_actual"] <= s.small_limit:
             sec_l = 0.0
     v["disp_gains"] = sec_g + v["der_gains"] + v["fx_gains"]
     v["disp_losses"] = sec_l + v["der_losses"] + v["fx_losses"]
@@ -513,8 +549,8 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     v["tax_net"] = v["tax_gross"] - v["tax_credit"]
     v["reclaim"] = sum(r["reclaim"] for r in b.wht_rows)
 
-    if abs(v["sec_net"] - v["ru_sec_net"]) > 0.02 * max(1.0, abs(v["ru_sec_net"])) + 50:
-        b.warnings.append(f"Osakkeiden FIFO-tulos {_fi(v['sec_net'], 0)} € poikkeaa IBKR:n R&U-tuloksesta "
+    if abs(v["sec_net_actual"] - v["ru_sec_net"]) > 0.02 * max(1.0, abs(v["ru_sec_net"])) + 50:
+        b.warnings.append(f"Osakkeiden FIFO-tulos {_fi(v['sec_net_actual'], 0)} € (todellisilla hankintamenoilla) poikkeaa IBKR:n R&U-tuloksesta "
                           f"{_fi(v['ru_sec_net'], 0)} € — ero johtuu valuuttakurssimenetelmästä (Vero: osto- ja "
                           "myyntipäivän kurssit). Tarkista, jos ero on suuri.")
     b.warnings.append("Varmista, että IBKR:n lot matching -asetus on FIFO (Verohallinto edellyttää FIFO-järjestystä).")
@@ -552,8 +588,9 @@ def _cfd(b: PBooks) -> None:
 def omavero_fields(b: PBooks) -> list[tuple[str, str, float, str]]:
     v = b.v
     rows = [
-        ("Arvopapereiden luovutukset (OmaVero / 9A)", "Osakkeet ja rahastot — luovutushinnat yhteensä", v["sec_proceeds"], "Myyntihinnat, myyntikulut vähennetty"),
-        ("Arvopapereiden luovutukset (OmaVero / 9A)", "Osakkeet ja rahastot — hankintamenot ja kulut yhteensä", v["sec_cost"], "FIFO, ostopäivän kurssi"),
+        ("Arvopapereiden luovutukset (OmaVero / 9A)", "Osakkeet ja rahastot — luovutushinnat yhteensä", v["sec_proceeds"], "Bruttomyyntihinnat (ennen myyntikuluja)"),
+        ("Arvopapereiden luovutukset (OmaVero / 9A)", "Osakkeet ja rahastot — hankintamenot ja kulut (tai hankintameno-olettamat) yhteensä", v["sec_cost"],
+         "FIFO, ostopäivän kurssi" + (f"; olettama {int(v['presumption_lots'])} erässä" if v.get("presumption_lots") else "")),
         ("Arvopapereiden luovutukset (OmaVero / 9A)", "Osakkeet ja rahastot — luovutusvoitot yhteensä", v["sec_gains"], "Hankintaerittäin"),
         ("Arvopapereiden luovutukset (OmaVero / 9A)", "Osakkeet ja rahastot — luovutustappiot yhteensä", -v["sec_losses"], ""),
         ("Arvopapereiden luovutukset (OmaVero / 9A)", "Johdannaiset (futuurit, optiot) — voitot", v["der_gains"], "IBKR R&U"),

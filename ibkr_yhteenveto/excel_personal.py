@@ -25,7 +25,7 @@ def write_personal_workbook(b: PBooks) -> bytes:
 
     om = Sheet(wb, "OmaVero-kentät", [42, 58, 18, 60])
     sm = Sheet(wb, "Arvopaperit yhteenveto", [14, 16, 18, 18, 16, 16, 16, 16, 30])
-    lu = Sheet(wb, "Luovutukset (FIFO)", [14, 12, 12, 12, 16, 16, 16, 30, 8, 16])
+    lu = Sheet(wb, "Luovutukset (FIFO)", [14, 12, 12, 12, 16, 16, 16, 34, 8, 16, 10, 14, 16])
     va = Sheet(wb, "Vuoden alun erät", [14, 12, 16, 16, 16, 12, 12, 40]) if b.opening else None
     de = Sheet(wb, "Johdannaiset", [16, 22, 16, 16, 16, 30])
     dv = Sheet(wb, "Osingot & lähdeverot", [12, 62, 8, 14, 14, 10, 8, 22])
@@ -52,6 +52,9 @@ def write_personal_workbook(b: PBooks) -> bytes:
     inp("Listattujen osinkojen veronalainen osuus", s.div_taxable_share, "85 %", "divsh", PCT)
     inp("Payment in lieu -korvauksen veronalainen osuus", s.pil_taxable_share, "100 % (muu pääomatulo)", "pilsh", PCT)
     inp("Aiempien vuosien vahvistetut luovutustappiot (€)", s.loss_carryforward, "Verotuspäätöksestä, 5 v", "cf")
+    inp("Hankintameno-olettama, kun edullisempi", "Kyllä" if s.use_presumption else "Ei",
+        "Kyllä/Ei — 20 % (40 % jos omistettu ≥ 10 v) bruttomyyntihinnasta erittäin, jos se antaa pienemmän voiton",
+        "olet", validation='"Kyllä,Ei"')
     asx.blank()
     asx.note("Sininen = syöte raportista, musta = kaava, vihreä = linkki. "
              f"Laskettu versiolla IBKR-yhteenveto {__version__} · {date.today().isoformat()}")
@@ -59,21 +62,34 @@ def write_personal_workbook(b: PBooks) -> bytes:
     # ---------------------------------------------------------------- Luovutukset (FIFO)
     lu.title("Arvopapereiden luovutukset hankintaerittäin (FIFO)",
              [sub, "EUR: myyntihinta myyntipäivän ja hankintameno ostopäivän kurssilla (IBKR Forex P/L Details).",
-              "Myyntihinnasta on vähennetty myyntiprovisio; hankintamenoon sisältyy ostoprovisio."])
-    lu.header(["Symboli", "Myyntipäivä", "Ostopäivä", "Määrä", "Luovutushinta €", "Hankintameno €",
-               "Voitto/tappio €", "Lähde", "Short", "Sis. optiopreemio €"])
+              "Luovutushinta = bruttomyyntihinta (ennen myyntiprovisiota ja myyntioption preemiota). Todellinen "
+              "hankintameno ja kulut = ostohinta + ostoprovisio + myyntiprovisio (+ preemio).",
+              "Vähennys = todelliset kulut tai hankintameno-olettama (20 %, 40 % jos omistettu ≥ 10 v), kumpi antaa "
+              "pienemmän voiton — erittäin (Vero 48262 §4.2.2). Olettama ei synnytä eikä kasvata tappiota."])
+    lu.header(["Symboli", "Myyntipäivä", "Ostopäivä", "Määrä", "Luovutushinta €", "Todellinen hankintameno ja kulut €",
+               "Voitto/tappio €", "Lähde", "Short", "Sis. optiopreemio €", "Olettama-%", "Olettama €",
+               "Käytetty vähennys €"])
     r0 = lu.r
     for m in b.matches:
         r = lu.r
-        lu.row([m.symbol, m.sale_date, m.buy_date, m.qty, round(m.proceeds, 2), round(m.cost, 2), f"=E{r}-F{r}",
-                m.source, "Kyllä" if m.short else "", round(m.premium, 2) if m.premium else None],
-               ["in", "in", "in", "in", "in", "in", "f", "t", "t", "in"], fmt=[None, None, None, "#,##0.####"])
+        if m.method == "olettama":          # user's choice: only the olettama (actual cost unknown)
+            ded = f"=L{r}"
+        elif m.presumption_rate > 0:
+            ded = f'=IF({ref["olet"]}="Kyllä",MAX(F{r},L{r}),F{r})'
+        else:
+            ded = f"=F{r}"
+        lu.row([m.symbol, m.sale_date, m.buy_date, m.qty, round(m.proceeds, 2),
+                None if m.method == "olettama" else round(m.cost, 2), f"=E{r}-M{r}",
+                m.source, "Kyllä" if m.short else "", round(m.premium, 2) if m.premium else None,
+                m.presumption_rate, f"=E{r}*K{r}", ded],
+               ["in", "in", "in", "in", "in", "in", "f", "t", "t", "in", "in", "f", "f"],
+               fmt=[None, None, None, "#,##0.####", None, None, None, None, None, None, PCT])
     r1 = max(lu.r - 1, r0)
     LU = dict(sym=f"'{lu.name}'!$A${r0}:$A${r1}", L=f"'{lu.name}'!$E${r0}:$E${r1}",
-              H=f"'{lu.name}'!$F${r0}:$F${r1}", R=f"'{lu.name}'!$G${r0}:$G${r1}")
-    rt = lu.row(["Yhteensä", None, None, None, f"=SUM(E{r0}:E{r1})", f"=SUM(F{r0}:F{r1})", f"=SUM(G{r0}:G{r1})"],
-                bold=True, total=True)
-    ref.update(L=lu.q(f"E{rt}"), H=lu.q(f"F{rt}"))
+              H=f"'{lu.name}'!$M${r0}:$M${r1}", R=f"'{lu.name}'!$G${r0}:$G${r1}")
+    rt = lu.row(["Yhteensä", None, None, None, f"=SUM(E{r0}:E{r1})", f"=SUM(F{r0}:F{r1})", f"=SUM(G{r0}:G{r1})",
+                 None, None, None, None, f"=SUM(L{r0}:L{r1})", f"=SUM(M{r0}:M{r1})"], bold=True, total=True)
+    ref.update(L=lu.q(f"E{rt}"), H=lu.q(f"M{rt}"), HA=lu.q(f"F{rt}"))
     rt = lu.row(["Voitot", None, None, None, None, None, f'=SUMIF(G{r0}:G{r1},">0")'], bold=True)
     ref["G"] = lu.q(f"G{rt}")
     rt = lu.row(["Tappiot", None, None, None, None, None, f'=SUMIF(G{r0}:G{r1},"<0")'], bold=True)
@@ -241,7 +257,7 @@ def write_personal_workbook(b: PBooks) -> bytes:
     ex = prow("Pienten luovutusten verovapaus sovelletaan?", f'=IF(AND({ref["L"]}>0,{ref["L"]}<={ref["small"]}),"Kyllä","Ei")',
               "Luovutushinnat ≤ raja")
     g1 = prow("Arvopapereiden voitot", f'=IF({ex}="Kyllä",0,{ref["G"]})', "Luovutukset (FIFO)", "link")
-    l1 = prow("Arvopapereiden tappiot", f'=IF(AND({ex}="Kyllä",{ref["H"]}<={ref["small"]}),0,{ref["T"]})', "", "link")
+    l1 = prow("Arvopapereiden tappiot", f'=IF(AND({ex}="Kyllä",{ref["HA"]}<={ref["small"]}),0,{ref["T"]})', "", "link")
     g2 = prow("Johdannaisten voitot", f"={ref['DG']}", "Johdannaiset", "link")
     l2 = prow("Johdannaisten tappiot", f"={ref['DL']}", "Johdannaiset", "link")
     g3 = prow("Valuutat (jos mukana)", f"={ref['FXG']}+{ref['FXL']}", "Johdannaiset-välilehti", "link")
@@ -274,7 +290,7 @@ def write_personal_workbook(b: PBooks) -> bytes:
     om.header(["Osio", "Kenttä", "EUR", "Huom."])
     links = {
         "Osakkeet ja rahastot — luovutushinnat yhteensä": f"={ref['L']}",
-        "Osakkeet ja rahastot — hankintamenot ja kulut yhteensä": f"={ref['H']}",
+        "Osakkeet ja rahastot — hankintamenot ja kulut (tai hankintameno-olettamat) yhteensä": f"={ref['H']}",
         "Osakkeet ja rahastot — luovutusvoitot yhteensä": f"={ref['G']}",
         "Osakkeet ja rahastot — luovutustappiot yhteensä": f"=-{ref['T']}",
         "Johdannaiset (futuurit, optiot) — voitot": f"={ref['DG']}",
@@ -315,13 +331,16 @@ def write_personal_workbook(b: PBooks) -> bytes:
         ("Vuoden alun positiot", "Erät, jotka on avattu ennen laskentakautta, käsitellään käyttäjän valinnan mukaan: "
                                  "alkuperäiset ostotiedot, aiemman kauden IBKR-raportti (erähistoria FIFO-järjestyksessä), "
                                  "hankintameno-olettama tai IBKR:n realisoidusta tuloksesta johdettu hankintameno. "
-                                 "Peruste näkyy erittäin Luovutukset- ja Vuoden alun erät -välilehdillä. Olettamaa "
-                                 "käytettäessä luovutushintana on provisiolla vähennetty hinta (tarkennetaan tehtävässä "
-                                 "hankintameno-olettama hankintaerittäin)."),
+                                 "Peruste näkyy erittäin Luovutukset- ja Vuoden alun erät -välilehdillä."),
         ("Valuuttakurssit", "Luovutushinta muunnetaan euroiksi myyntipäivän ja hankintameno ostopäivän kurssilla "
                             "(IBKR Forex P/L Details, kauppakohtaiset EUR-määrät)."),
-        ("Hankintameno-olettama", "20 % (40 % jos omistettu ≥ 10 v) myyntihinnasta voidaan käyttää todellisen hankintamenon "
-                                  "sijaan, jos se on suurempi — kannattaa vain suurivoittoisissa, pitkään pidetyissä erissä."),
+        ("Hankintameno-olettama", "20 % (40 % jos omistettu ≥ 10 v) bruttomyyntihinnasta (ennen myyntiprovisiota ja "
+                                  "myyntioption preemiota). Kun olettama käytetään, mitään kuluja ei vähennetä. Valinta "
+                                  "tehdään erittäin: laskelma käyttää olettamaa, kun se antaa pienemmän voiton (asetus "
+                                  "Asetukset-välilehdellä). Olettama ei synnytä eikä kasvata tappiota. Ei futuureille, "
+                                  "CFD:ille eikä OTC-johdannaisille. Ostetun option sulkemiseen myymällä olettamaa ei "
+                                  "sovelleta (ohje ei mainitse; TVL 46 §). PDF:n kauppakohtaisille riveille myyntiprovisio "
+                                  "saadaan CSV:n toimeksiantoriveiltä."),
         ("Johdannaiset", "Futuurit ja optiot: voitot ja tappiot IBKR:n realisoiduista tuloksista. Tappiot vähennetään "
                          "luovutusvoitoista ja muista pääomatuloista (5 v)."),
         ("Optioiden toteutus", "Kun ostettu osto-optio toteutetaan, maksettu preemio kaupankäyntikuluineen kuuluu "

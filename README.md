@@ -170,6 +170,8 @@ kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä rapor
   huomioida (Verohallinto). Kauppakohtainen erittely tarvitsee Activity Statement CSV:n.
 * **Ulkomaan pääomatulot (16B):** osingot (85 % veronalaista), lähdeveron hyvitys sopimusrajaan asti, korot.
 * **Vähennykset:** marginaalilainan korot, IBKR-kulut, aiempien vuosien vahvistetut tappiot.
+* **Hankintameno-olettama** erittäin: 20 % (40 %, jos omistettu vähintään 10 vuotta) bruttomyyntihinnasta, kun se
+  antaa pienemmän voiton kuin todelliset kulut; ei koskaan synnytä tappiota. Voi kytkeä pois asetuksista.
 * **Pienten luovutusten verovapaus** (luovutushinnat ≤ 1 000 €), pääomatulovero 30 % / 34 % (> 30 000 €).
 * **Vuoden alun positiot:** katso alta.
 

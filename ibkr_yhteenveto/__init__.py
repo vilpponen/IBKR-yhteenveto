@@ -83,7 +83,30 @@ def _merge(group: list[Statement]) -> Statement:
         if other.period_end and main.period_end and other.period_end != main.period_end:
             main.warnings.append(f"Different period ends merged: {main.period_end} vs {other.period_end}")
         main.merge(other)
+    _leg_commissions(main)
     return main
+
+
+def _leg_commissions(st: Statement) -> None:
+    """PDF Forex P/L lots are net of commission; give each lot its share of the CSV order's commission (EUR at the
+    lot's own rate) so the gross sale price is known (hankintameno-olettama is a share of the GROSS price)."""
+    if not st.trade_rows:
+        return
+    rows: dict[tuple, list[dict]] = {}
+    day: dict[tuple, list[dict]] = {}
+    for r in st.trade_rows:
+        rows.setdefault((r["date"], r["time"], r["symbol"]), []).append(r)
+        day.setdefault((r["date"], r["symbol"], r["qty"] > 0), []).append(r)
+    for leg in st.stock_legs:
+        if leg.get("comm_eur") is not None or not leg.get("cash"):
+            continue
+        cands = [r for r in rows.get((leg["date"], leg.get("time", ""), leg["symbol"]), [])
+                 if r["qty"] and (r["qty"] > 0) == (leg["qty"] > 0)]
+        if not cands:   # FX lots of one order can carry later timestamps: use that day's orders (same side)
+            cands = [r for r in day.get((leg["date"], leg["symbol"], leg["qty"] > 0), []) if r["qty"]]
+        if cands:   # several orders in the same second: spread their combined commission by quantity
+            q = sum(abs(r["qty"]) for r in cands)
+            leg["comm_eur"] = sum(r["comm"] for r in cands) * abs(leg["qty"]) / q * (leg["eur"] / leg["cash"])
 
 
 def _check_gaps(main: Statement) -> None:

@@ -110,7 +110,7 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
     for m in pb.matches:
         a = agg[m.symbol]
         a[0] += m.proceeds
-        a[1] += m.cost
+        a[1] += m.proceeds - m.result      # deduction used (actual costs or olettama)
         a[2 if m.result > 0 else 3] += m.result
     warnings = list(pb.warnings)
     if v["small_exempt"]:
@@ -159,7 +159,9 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
                              [[w["country"], w["type"], w["gross"], w["wht"], w["credit"], w["reclaim"]]
                               for w in pb.wht_rows], [2, 3, 4, 5]),
         },
-        "notes": ["Arvio IBKR-tilin osuudesta. Lopullinen vero lasketaan OmaVerossa kaikista tuloistasi."],
+        "notes": ["Arvio IBKR-tilin osuudesta. Lopullinen vero lasketaan OmaVerossa kaikista tuloistasi."]
+                 + ([f"Hankintameno-olettama käytetty {int(v['presumption_lots'])} erässä (vähennys todellisia kuluja "
+                     f"suurempi {_fi(v['presumption_benefit'])} €)."] if v.get("presumption_lots") else []),
     }
     if not pb.cfd_rows:
         del res["tabs"]["CFD:t"]
