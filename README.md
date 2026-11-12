@@ -120,9 +120,20 @@ Päivitys: `git pull`.
 
 ### Komentorivi ilman selainta
 
+Osakeyhtiö:
+
 ```bash
-.venv/bin/python -m ibkr_yhteenveto raportti.csv raportti.pdf -o tulos.xlsx
+.venv/bin/python -m ibkr_yhteenveto raportti.csv -o tilinpaatos.xlsx --opening-writedowns 0
 ```
+
+Yksityishenkilö (aiempien vuosien raportit voi antaa samassa komennossa erähistoriaksi):
+
+```bash
+.venv/bin/python -m ibkr_yhteenveto raportti.csv raportti.pdf edellinen_vuosi.csv --personal -o omavero.xlsx
+```
+
+Vuoden alun erät voi antaa web-sovelluksesta viedyllä JSON-tiedostolla (`--opening-lots erat.json`). Jos jokin erä
+jää ratkaisematta, komento kertoo sen ja palauttaa koodin 2 (tulos keskeneräinen). Kaikki valinnat: `--help`.
 
 ## Mitkä raportit IBKR:stä
 

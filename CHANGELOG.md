@@ -21,6 +21,8 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
 - Yksityishenkilö: **johdannaisten markkinapaikka**. Futuurien ja optioiden tappiot vähennetään vain, kun
   markkinapaikka on säännelty tai siihen rinnastettava (oletuksena ETA:n ja Yhdysvaltain pörssit, listaa voi täydentää
   asetuksissa). Muiden markkinapaikkojen tappiot näytetään vähennyskelvottomina; voitot verotetaan.
+- Komentorivi: **henkilötila** (`--personal`) sekä `--loss-cf`, `--include-fx`, `--no-presumption`,
+  `--extra-regulated` ja `--opening-lots` (web-sovelluksen JSON-vienti). Keskeneräinen tulos palauttaa koodin 2.
 
 **Muutettu**
 - OmaVero-kentät: luovutushinnat ovat bruttomyyntihintoja ja myyntiprovisiot ovat kuluissa (aiemmin myyntiprovisio
