@@ -352,8 +352,12 @@ def write_personal_workbook(b: PBooks) -> bytes:
                                  "alkuperäiset ostotiedot, aiemman kauden IBKR-raportti (erähistoria FIFO-järjestyksessä), "
                                  "hankintameno-olettama tai IBKR:n realisoidusta tuloksesta johdettu hankintameno. "
                                  "Peruste näkyy erittäin Luovutukset- ja Vuoden alun erät -välilehdillä."),
-        ("Valuuttakurssit", "Luovutushinta muunnetaan euroiksi myyntipäivän ja hankintameno ostopäivän kurssilla "
-                            "(IBKR Forex P/L Details, kauppakohtaiset EUR-määrät)."),
+        ("Valuuttakurssit", ("EKP:n viitekurssi kaupan selvityspäivältä (T+1 USD/CAD, muuten T+2; puuttuva päivä → "
+                             "edellinen kurssi). Hankintameno muunnetaan ostokaupan ja luovutushinta myyntikaupan "
+                             "selvityspäivän kurssilla (Vero 48262 §2.2). Ero IBKR:n kursseihin näkyy huomioissa.")
+                            if (s.fx_mode == "ecb" and st.ecb_rates) else
+                            "Luovutushinta muunnetaan euroiksi myyntipäivän ja hankintameno ostopäivän kurssilla "
+                            "(IBKR Forex P/L Details, kauppakohtaiset EUR-määrät). Valinnaisesti EKP:n viitekurssit."),
         ("Hankintameno-olettama", "20 % (40 % jos omistettu ≥ 10 v) bruttomyyntihinnasta (ennen myyntiprovisiota ja "
                                   "myyntioption preemiota). Kun olettama käytetään, mitään kuluja ei vähennetä. Valinta "
                                   "tehdään erittäin: laskelma käyttää olettamaa, kun se antaa pienemmän voiton (asetus "

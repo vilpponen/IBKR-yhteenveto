@@ -116,6 +116,8 @@ class Statement:
     stock_legs: list[dict] = field(default_factory=list)
     # realized P/L per closing CFD trade (CSV Trades): {"date","symbol","cls","ccy","pl","eur"} — eur None = unconverted
     cfd_trades: list[dict] = field(default_factory=list)
+    # ECB reference rates {date: {ccy: units per EUR}} from a user-supplied eurofxref-hist.csv (trimmed to need)
+    ecb_rates: dict[str, dict[str, float]] = field(default_factory=dict)
     # listing exchange per symbol (CSV Financial Instrument Information 'Listing Exch')
     listing_exch: dict[str, str] = field(default_factory=dict)
     # corporate actions on shares (CSV): {"date","symbol","description","qty","proceeds_eur","ccy"}
@@ -172,6 +174,7 @@ class Statement:
         st.trade_rows = [dict(x) for x in d.get("trade_rows", [])]
         st.corporate_actions = [dict(x) for x in d.get("corporate_actions", [])]
         st.listing_exch = dict(d.get("listing_exch", {}))
+        st.ecb_rates = {k: dict(v) for k, v in d.get("ecb_rates", {}).items()}
         st.exercise_rows = [dict(x) for x in d.get("exercise_rows", [])]
         st.history_periods = list(d.get("history_periods", []))
         st.etf_symbols = set(d.get("etf_symbols", []))

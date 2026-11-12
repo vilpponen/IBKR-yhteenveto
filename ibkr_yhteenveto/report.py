@@ -30,6 +30,7 @@ def recognised(st: Statement) -> dict:
         "Transaktioverot (FTT)": st.transaction_fees_eur is not None or "Transaction Fees" in st.change_in_nav,
         "Change in NAV -tarkistukset": "Mark-to-Market" in st.change_in_nav,
         "Kauppakohtaiset EUR-määrät": bool(st.stock_legs) and all(x.get("exact") for x in st.stock_legs),
+        "EKP-kurssit (valinnainen)": bool(st.ecb_rates),
     }
     return {
         "title": st.title, "name": st.name, "account": st.account, "customer_type": st.customer_type,

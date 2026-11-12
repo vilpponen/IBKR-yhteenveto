@@ -127,6 +127,7 @@ class Handler(BaseHTTPRequestHandler):
                         include_fx=bool(o.get("include_fx")), credit_interest_wht=bool(o.get("int_credit")),
                         use_presumption=bool(o.get("use_presumption", True)),
                         extra_regulated=str(o.get("extra_regulated", ""))[:500],
+                        fx_mode="ecb" if o.get("fx_mode") == "ecb" else "ibkr",
                         opening_choices=o.get("opening_choices") if isinstance(o.get("opening_choices"), dict) else {}))
                 else:
                     ftt = f(o.get("ftt"))

@@ -145,6 +145,11 @@ jää ratkaisematta, komento kertoo sen ja palauttaa koodin 2 (tulos keskeneräi
 | **Osakeyhtiö** | Activity Statement **CSV** | CSV (PDF ei muuta tulosta) | CSV:ssä on kaikki: NAV, Change in NAV -tarkistukset, R&U-tulokset, positiot, rahaliikenne ja transaktioverot (FTT) |
 | **Yksityishenkilö** | Activity Statement **CSV** | **CSV + PDF** | Verohallinnon tapa vaatii jokaiselle kaupalle EUR-määrän kauppapäivän kurssilla. Ne ovat vain PDF:n *Forex P/L Details* -osiossa. Pelkällä CSV:llä valuuttamääräiset kaupat muunnetaan keskikurssilla (työkalu varoittaa) — testiaineistossa pääomatulo oli noin 3 % liian suuri. Jos kaikki kaupat ovat euroissa, CSV riittää. |
 
+**EKP-kurssit (valinnainen, yksityishenkilö):** lisää EKP:n kurssihistoria `eurofxref-hist.csv`
+([ecb.europa.eu](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html))
+latauslaatikkoon ja valitse asetuksista *EKP:n viitekurssi selvityspäivältä*. Oletuksena käytetään IBKR:n
+kauppakohtaisia EUR-määriä.
+
 **Aiempina vuosina ostetut osakkeet (yksityishenkilö):** lisää samaan latauslaatikkoon myös edellisten vuosien
 Activity Statementit (CSV + PDF). Uusin kausi lasketaan, ja aiemmista luetaan ostoerät EUR-määrineen.
 

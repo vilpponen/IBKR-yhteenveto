@@ -32,6 +32,8 @@ def main(argv=None) -> int:
     p.add_argument("--loss-cf", type=float, default=0.0, help="confirmed capital losses from earlier years (EUR)")
     p.add_argument("--include-fx", action="store_true", help="include IBKR's Forex row as currency disposals")
     p.add_argument("--no-presumption", action="store_true", help="never use hankintameno-olettama")
+    p.add_argument("--fx-mode", default="ibkr", choices=["ibkr", "ecb"],
+                   help="ecb: ECB reference rate of the settlement date (give eurofxref-hist.csv among the files)")
     p.add_argument("--extra-regulated", default="", help="extra regulated exchanges, comma-separated (e.g. ICEEU)")
     p.add_argument("--opening-lots", default=None,
                    help="year-start lots JSON (the web app's 'Vie valinnat' / 'Vuoden lopun erät' export)")
@@ -67,7 +69,8 @@ def _personal(a, st) -> int:
         data = json.loads(Path(a.opening_lots).read_text(encoding="utf-8"))
         choices = data.get("choices", data) if isinstance(data, dict) else {}
     s = PSettings(name=a.company, loss_carryforward=a.loss_cf, include_fx=a.include_fx,
-                  use_presumption=not a.no_presumption, extra_regulated=a.extra_regulated, opening_choices=choices)
+                  use_presumption=not a.no_presumption, extra_regulated=a.extra_regulated, opening_choices=choices,
+                  fx_mode=a.fx_mode)
     b = build_personal(st, s)
     out = Path(a.out or f"{st.account}_{st.period_end[:4]}_omavero.xlsx")
     out.write_bytes(write_personal_workbook(b))

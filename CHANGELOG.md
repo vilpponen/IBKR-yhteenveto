@@ -23,6 +23,9 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
   asetuksissa). Muiden markkinapaikkojen tappiot näytetään vähennyskelvottomina; voitot verotetaan.
 - Komentorivi: **henkilötila** (`--personal`) sekä `--loss-cf`, `--include-fx`, `--no-presumption`,
   `--extra-regulated` ja `--opening-lots` (web-sovelluksen JSON-vienti). Keskeneräinen tulos palauttaa koodin 2.
+- Yksityishenkilö: **valinnainen EKP-kurssitila**. Kun EKP:n kurssitiedosto (`eurofxref-hist.csv`) lisätään
+  raporttien kanssa, kaupat muunnetaan EKP:n viitekurssilla selvityspäivältä, ja tulos näyttää eron IBKR:n kursseihin.
+  Ei verkkoyhteyksiä; oletuksena edelleen IBKR:n kauppakohtaiset EUR-määrät.
 
 **Muutettu**
 - OmaVero-kentät: luovutushinnat ovat bruttomyyntihintoja ja myyntiprovisiot ovat kuluissa (aiemmin myyntiprovisio

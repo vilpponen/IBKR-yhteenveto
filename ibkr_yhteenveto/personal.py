@@ -57,6 +57,7 @@ class PSettings:
     div_taxable_share: float = 0.85    # listed company dividends
     pil_taxable_share: float = 1.0     # payment in lieu (SYEP) — ordinary capital income
     credit_interest_wht: bool = False
+    fx_mode: str = "ibkr"              # "ibkr": IBKR's per-trade EUR; "ecb": ECB rate of the settlement date
     extra_regulated: str = ""          # user's additional regulated/equivalent exchanges, comma-separated
     use_presumption: bool = True       # hankintameno-olettama per lot when it gives the lower gain (Vero 48262 §4.2.2)
     # year-start positions: {symbol: {"method": "lots"|"manual"|"olettama"|"ibkr",
@@ -568,9 +569,24 @@ def option_opening(events: list[dict], st: Statement) -> list[dict]:
 
 
 def build_personal(st: Statement, s: PSettings) -> PBooks:
+    ecb_note = None
+    if s.fx_mode == "ecb":
+        from dataclasses import replace
+        from .fx_ecb import convert_legs
+        if not st.ecb_rates:
+            ecb_note = ("EKP-kurssit valittu, mutta EKP:n kurssitiedostoa (eurofxref-hist.csv) ei ole lisätty — käytetty "
+                        "IBKR:n kursseja.")
+        else:
+            w: list[str] = []
+            alt = build_personal(st, replace(s, fx_mode="ibkr"))
+            st = replace(st, stock_legs=convert_legs(st.stock_legs, st.ecb_rates, st.base_currency, w),
+                         history_legs=convert_legs(st.history_legs, st.ecb_rates, st.base_currency, w))
+            ecb_note = (w, alt.v["sec_net"], alt.v["capital_income"])
     b = PBooks(st, s)
     v = b.v
     b.warnings += st.warnings
+    if isinstance(ecb_note, str):
+        b.warnings.append(ecb_note)
     if not st.stock_legs and any(r.asset_class == "Stocks" for r in st.ru):
         b.warnings.append("Osakekauppojen EUR-rivejä ei löytynyt — luovutushinnat puuttuvat. Käytä PDF:ää, jossa on "
                           "'Forex P/L Details' (Realized Summary / Activity Statement).")
@@ -705,6 +721,13 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
                           f"{_fi(v['ru_sec_net'], 0)} € — ero johtuu valuuttakurssimenetelmästä (Vero: osto- ja "
                           "myyntipäivän kurssit). Tarkista, jos ero on suuri.")
     b.warnings.append("Varmista, että IBKR:n lot matching -asetus on FIFO (Verohallinto edellyttää FIFO-järjestystä).")
+    if isinstance(ecb_note, tuple):
+        w, alt_sec, alt_ci = ecb_note
+        b.warnings += w
+        v["fx_alt_sec_net"], v["fx_alt_capital_income"] = alt_sec, alt_ci
+        b.warnings.insert(0, f"Valuuttakurssit: EKP:n viitekurssi selvityspäivältä. Arvopapereiden tulos "
+                             f"{_fi(v['sec_net'])} € (IBKR:n kursseilla {_fi(alt_sec)} €, ero {_fi(v['sec_net'] - alt_sec)} €); "
+                             f"pääomatulo {_fi(v['capital_income'])} € (IBKR:n kursseilla {_fi(alt_ci)} €).")
     return b
 
 

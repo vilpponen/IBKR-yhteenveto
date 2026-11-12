@@ -6,6 +6,7 @@ from pathlib import Path
 from .books import Books, Settings, build
 from .excel import write_workbook
 from .model import Statement
+from .fx_ecb import is_ecb, parse_ecb, trim
 from .version import __version__
 
 __all__ = ["__version__", "load", "build", "write_workbook", "Settings", "Books", "Statement"]
@@ -23,7 +24,7 @@ def load(paths: list[str | Path | tuple[str, bytes]]) -> Statement:
     from .parse_csv import parse_csv
     from .parse_pdf import parse_pdf
 
-    stmts = []
+    stmts, ecb = [], None
     for p in paths:
         if isinstance(p, tuple):
             name, data = Path(p[0]).name, p[1]
@@ -31,16 +32,19 @@ def load(paths: list[str | Path | tuple[str, bytes]]) -> Statement:
             name, data = Path(p).name, None
         ext = Path(name).suffix.lower()
         if ext == ".csv":
-            if data is None:
-                stmts.append(parse_csv(Path(p)))
-            else:
-                stmts.append(parse_csv(data.decode("utf-8-sig") + "\n", name=name))
+            text = Path(p).read_text(encoding="utf-8-sig") if data is None else data.decode("utf-8-sig")
+            if is_ecb(text):          # ECB reference rates (eurofxref-hist.csv), not a statement
+                ecb = parse_ecb(text)
+                continue
+            stmts.append(parse_csv(text + "\n", name=name))
         elif ext == ".pdf":
             stmts.append(parse_pdf(Path(p) if data is None else data, name=name))
         else:
             raise ValueError(f"Unsupported file type: {name} (use IBKR PDF or CSV)")
     # Statements of earlier periods (same account) are lot history for year-start positions; the latest period is
     # the tax year. Within a period: CSVs first (they carry Change in NAV and exact per-line data).
+    if not stmts:
+        raise ValueError("Ei IBKR-raporttia — lisää Activity Statement (CSV/PDF); EKP-kurssitiedosto yksin ei riitä.")
     ends = sorted({s.period_end for s in stmts if s.period_end}, reverse=True)
     target_end = ends[0] if ends else ""
     groups: dict[str, list[Statement]] = {}
@@ -60,6 +64,11 @@ def load(paths: list[str | Path | tuple[str, bytes]]) -> Statement:
                                  "osakekauppoja EUR-määrineen.")
     main.history_legs.sort(key=lambda x: x["date"])
     _check_gaps(main)
+    if ecb:
+        legs = main.stock_legs + main.history_legs
+        dates = sorted(x["date"] for x in legs if x.get("date"))
+        main.ecb_rates = trim(ecb, {x.get("ccy", "") for x in legs}, dates[0] if dates else "",
+                              dates[-1] if dates else "")
     tax = main.change_in_nav.get("Sales Tax")
     if tax and not any("sales tax" in f.description.lower() for f in main.fees):
         from .model import CashLine
@@ -106,7 +115,8 @@ def _leg_commissions(st: Statement) -> None:
             cands = [r for r in day.get((leg["date"], leg["symbol"], leg["qty"] > 0), []) if r["qty"]]
         if cands:   # several orders in the same second: spread their combined commission by quantity
             q = sum(abs(r["qty"]) for r in cands)
-            leg["comm_eur"] = sum(r["comm"] for r in cands) * abs(leg["qty"]) / q * (leg["eur"] / leg["cash"])
+            leg["comm_ccy"] = sum(r["comm"] for r in cands) * abs(leg["qty"]) / q
+            leg["comm_eur"] = leg["comm_ccy"] * (leg["eur"] / leg["cash"])
 
 
 def _check_gaps(main: Statement) -> None:

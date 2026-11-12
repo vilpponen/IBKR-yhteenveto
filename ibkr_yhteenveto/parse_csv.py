@@ -159,7 +159,7 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
         elif ratio and ratio.get(ccy):
             st.stock_legs.append({"date": dt[:10], "time": dt[12:20].strip(), "symbol": d.get("Symbol", ""), "qty": q,
                                   "ccy": ccy, "eur": amt * abs(ratio[ccy]), "comm_eur": comm * abs(ratio[ccy]),
-                                  "exact": False})
+                                  "cash": amt, "comm_ccy": comm, "exact": False})
 
     st.cfd_trades = _cfd_trades(rows.get("Trades", []), base)
     info = {(d.get("Symbol") or "").strip(): d for d in data("Financial Instrument Information")
