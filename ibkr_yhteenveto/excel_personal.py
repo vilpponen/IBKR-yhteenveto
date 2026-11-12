@@ -135,6 +135,19 @@ def write_personal_workbook(b: PBooks) -> bytes:
                     if any(m.symbol == sym and m.method != "fifo" for m in b.matches) else ""],
                    ["in", "f", "f", "f", "f", "f", "in", "f", "t"])
 
+    if b.ca_events:
+        sm.blank()
+        sm.section("YRITYSTAPAHTUMAT (split, yhdistely, osakeanti)", 9)
+        sm.header(["Päivä", "Symboli", "Tyyppi", "Kerroin", "Määrän muutos", "Murto-osa", "Käteinen €", "Käsittely",
+                   "Kuvaus"])
+        kinds = {"split": "Split / yhdistely", "stock_dividend": "Osake- tai rahastoanti", "unknown": "Tuntematon"}
+        for e in b.ca_events:
+            sm.row([e["date"], e["symbol"], kinds.get(e["kind"], e["kind"]), e["factor"], e["delta"],
+                    e["fraction"] or None, e["proceeds_eur"], e["handled"], e["description"][:120]],
+                   ["in", "in", "t", "in", "in", "in", "in", "t", "t"], fmt=[None, None, None, "0.####", "#,##0.####"])
+        sm.note("Verohallinto: split ja rahastoanti jakavat hankintamenon uusille osakkeille, omistusaika ei muutu; "
+                "murto-osista maksettu käteinen on luovutus (Vero 48262).")
+
     # ---------------------------------------------------------------- Johdannaiset
     de.title("Johdannaiset", [sub, "Futuurit ja optiot: IBKR Realized & Unrealized Performance Summary (realisoidut, EUR).",
                                   "CFD:t erikseen alla: muuta pääomatuloa, tappiot vähennyskelvottomia."])

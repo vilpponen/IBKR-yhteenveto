@@ -11,6 +11,7 @@ acquisition costs > 1 000 €).
 """
 from __future__ import annotations
 
+import re
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import date
@@ -78,6 +79,7 @@ class Match:
     premium: float = 0.0  # option premium EUR included in cost (exercised call or put)
     presumption_rate: float = 0.0          # 0.2 / 0.4 when hankintameno-olettama may be used, else 0
     deduction: float | None = None         # what is deducted: cost, or the olettama when it gives the lower gain
+    note: str = ""                          # e.g. fractional shares paid in cash in a corporate action
 
     @property
     def presumption(self) -> float:
@@ -93,7 +95,7 @@ class Match:
         r = f"{round(self.presumption_rate * 100)} %"
         if self.method == "olettama":
             return f"Hankintameno-olettama {r}"
-        base = SOURCES.get(self.method, self.method)
+        base = SOURCES.get(self.method, self.method) + (f" · {self.note}" if self.note else "")
         return f"{base} · olettama {r}" if self.presumption_used else base
 
     @property
@@ -114,6 +116,8 @@ class PBooks:
     ru_by_symbol: dict[str, float] = field(default_factory=dict)
     opening: list[dict] = field(default_factory=list)    # year-start lots consumed this year + how they were handled
     option_events: list[dict] = field(default_factory=list)  # exercises / assignments and how the premium was used
+    ca_events: list[dict] = field(default_factory=list)      # corporate actions applied to share lots
+    blocked: list[str] = field(default_factory=list)         # symbols whose FIFO stopped at an unknown corporate action
     end_lots: list[dict] = field(default_factory=list)   # open lots at period end (export for next year)
     preliminary: bool = False                             # some year-start lot has no user decision
 
@@ -271,8 +275,50 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
     return events, legs
 
 
+_CA_RATIO = re.compile(r"(\d+(?:\.\d+)?)\s+for\s+(\d+(?:\.\d+)?)", re.I)
+
+
+def _ca_kind(desc: str) -> str:
+    if re.search(r"\bsplit\b", desc, re.I):
+        return "split"
+    if re.search(r"stock dividend|bonus (issue|share)|capitali[sz]ation issue|rahastoanti", desc, re.I):
+        return "stock_dividend"
+    return "unknown"
+
+
+def corporate_events(st: Statement) -> tuple[dict[str, list[dict]], dict[str, str]]:
+    """Share corporate actions as per-symbol events: {symbol: [event]}, plus ticker renames {old: new}.
+
+    Rows of one action (same date, type and ratio) are grouped; when the old line is removed under one ticker and the
+    new one added under another (typical reverse split), the old ticker's lots move to the new ticker."""
+    groups: dict[tuple, list[dict]] = defaultdict(list)
+    for r in st.corporate_actions:
+        m = _CA_RATIO.search(r["description"])
+        groups[(r["date"], _ca_kind(r["description"]), m.groups() if m else None)].append(r)
+    rename: dict[str, str] = {}
+    for (_, _, _), rows in groups.items():
+        neg = {r["symbol"] for r in rows if r["qty"] < 0}
+        pos = {r["symbol"] for r in rows if r["qty"] > 0}
+        if len(neg) == 1 and len(pos) == 1 and neg != pos:
+            rename[next(iter(neg))] = next(iter(pos))
+    events: dict[str, list[dict]] = defaultdict(list)
+    for (d, kind, ratio), rows in groups.items():
+        by_sym: dict[str, list[dict]] = defaultdict(list)
+        for r in rows:
+            by_sym[rename.get(r["symbol"], r["symbol"])].append(r)
+        for sym, rs in by_sym.items():
+            pe = [r["proceeds_eur"] for r in rs]
+            events[sym].append({"date": d, "symbol": sym, "kind": kind,
+                                "ratio": (float(ratio[0]), float(ratio[1])) if ratio else None,
+                                "delta": sum(r["qty"] for r in rs),
+                                "proceeds_eur": None if any(p is None for p in pe) else sum(pe),
+                                "description": rs[0]["description"]})
+    return events, rename
+
+
 def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None,
-              legs_override: list[dict] | None = None) -> tuple[list[Match], list[dict]]:
+              legs_override: list[dict] | None = None, ca_log: list[dict] | None = None,
+              blocked: list[str] | None = None) -> tuple[list[Match], list[dict]]:
     """FIFO per symbol over history legs (earlier statements) + this period's legs.
 
     Returns this period's disposals and the lots still open at period end. The year-start position (end holding
@@ -285,17 +331,30 @@ def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None,
     start = st.period_start or ""
     legs_by_sym = defaultdict(list)
     stock_legs = legs_override if legs_override is not None else st.stock_legs
+    ca_events, rename = corporate_events(st)
     for i, x in enumerate(list(st.history_legs) + list(stock_legs)):
-        legs_by_sym[x["symbol"]].append((x["date"], i, x))
+        legs_by_sym[rename.get(x["symbol"], x["symbol"])].append((x["date"], i, x))
     out: list[Match] = []
     end_lots: list[dict] = []
-    for sym in sorted(set(legs_by_sym) | {k for k, q in end_qty.items() if abs(q) > 1e-9}):
-        legs = sorted(legs_by_sym.get(sym, []), key=lambda t: (t[0], t[1]))
-        opening = end_qty.get(sym, 0.0) - sum(x["qty"] for _, _, x in legs)
+    for sym in sorted(set(legs_by_sym) | set(ca_events) | {k for k, q in end_qty.items() if abs(q) > 1e-9}):
+        # corporate actions take effect at the start of their day, before that day's trades
+        seq = sorted([(d, 1, i, x) for d, i, x in legs_by_sym.get(sym, [])]
+                     + [(e["date"], 0, j, e) for j, e in enumerate(ca_events.get(sym, []))], key=lambda t: t[:3])
+        legs = [(d, i, x) for d, k, i, x in seq if k == 1]
+        opening = (end_qty.get(sym, 0.0) - sum(x["qty"] for _, _, x in legs)
+                   - sum(e["delta"] for e in ca_events.get(sym, []) if e["kind"] != "unknown"))
         lots: deque = deque()  # [qty_signed, eur_per_share or None, date, method, option premium per share]
         if abs(opening) > 1e-9:
             lots.extend(_choice_lots(sym, opening, choices.get(sym), warnings))
-        for d, _, x in legs:
+        stop = False
+        for d, kind, _, x in seq:
+            if stop:
+                break
+            if kind == 0:   # corporate action
+                stop = _apply_ca(sym, x, lots, d >= start, out, warnings, ca_log)
+                if stop and blocked is not None:
+                    blocked.append(sym)
+                continue
             q, px = x["qty"], x["eur"] / abs(x["qty"]) if x["qty"] else 0.0
             pps = x.get("opt_prem", 0.0) / abs(x["qty"]) if x["qty"] else 0.0
             # gross sale price per share: before the selling commission and before a put-premium deduction
@@ -325,6 +384,67 @@ def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None,
                              "cost_eur": abs(lot[1] * lot[0]) if known else None,
                              "olettama": lot[3] == "olettama", "method": lot[3]})
     return out, end_lots
+
+
+def _apply_ca(sym: str, ev: dict, lots: deque, in_period: bool, out: list, warnings: list[str],
+              log: list[dict] | None) -> bool:
+    """Apply a split / stock dividend to the open lots (Vero: total acquisition cost and holding period unchanged;
+    cash for fractional shares is a disposal). Returns True when FIFO must stop for the symbol (unknown action)."""
+    entry = dict(ev, factor=None, fraction=0.0, handled="")
+    if log is not None:
+        log.append(entry)
+    held = sum(l[0] for l in lots)
+    if ev["kind"] == "unknown":
+        warnings.append(f"{sym}: tuntematon yritystapahtuma {ev['date']} ({ev['description'][:80]}) — FIFO-laskenta "
+                        "keskeytetty tälle osakkeelle; tarkista käsin. Laskelma on keskeneräinen.")
+        entry["handled"] = "Tuntematon — FIFO keskeytetty"
+        return True
+    if abs(held) < 1e-9:
+        warnings.append(f"{sym}: yritystapahtuma {ev['date']}, mutta ei avoimia eriä — ohitettu.")
+        entry["handled"] = "Ei avoimia eriä — ohitettu"
+        return False
+    after = held + ev["delta"]
+    if ev["ratio"]:
+        a, b_ = ev["ratio"]
+        f = (1 + a / b_) if ev["kind"] == "stock_dividend" else a / b_
+    else:
+        f = after / held
+    fraction = held * f - after                  # shares (new units) not delivered → paid in cash
+    if fraction < -1e-6:
+        warnings.append(f"{sym}: yritystapahtuman {ev['date']} määrät eivät täsmää suhteeseen — käytetty IBKR:n määriä.")
+        f, fraction = after / held, 0.0
+    if f <= 1e-12:      # the whole position disappeared: not a split we can apply
+        warnings.append(f"{sym}: yritystapahtuma {ev['date']} poisti koko position ({ev['description'][:80]}) — "
+                        "FIFO-laskenta keskeytetty tälle osakkeelle; tarkista käsin. Laskelma on keskeneräinen.")
+        entry["handled"] = "Positio poistui — FIFO keskeytetty"
+        return True
+    for l in lots:                                 # same total cost, same purchase dates
+        l[0] *= f
+        if l[1] is not None:
+            l[1] /= f
+        l[4] /= f
+    entry["factor"], entry["fraction"] = f, max(fraction, 0.0)
+    entry["handled"] = "Erät kerrottu suhteella, hankintameno ennallaan"
+    if fraction > 1e-6:
+        cash = ev["proceeds_eur"]
+        if cash is None:
+            warnings.append(f"{sym}: murto-osien käteissuoritus {ev['date']} ilman EUR-määrää — luovutus 0 €.")
+            cash = 0.0
+        left, sign = fraction, (1 if held > 0 else -1)
+        while left > 1e-9 and lots:
+            lot = lots[0]
+            n = min(left, abs(lot[0]))
+            if in_period and sign > 0:
+                out.append(Match(sym, ev["date"], lot[2], n, cash * n / fraction,
+                                 0.0 if lot[3] == "olettama" else (lot[1] or 0.0) * n, method=lot[3],
+                                 presumption_rate=0.4 if _ten_years(lot[2], ev["date"]) else 0.2,
+                                 note="murto-osa, yritystapahtuma"))
+            lot[0] -= sign * n
+            left -= n
+            if abs(lot[0]) < 1e-9:
+                lots.popleft()
+        entry["handled"] += f"; murto-osa {_fi(fraction, 4)} kpl luovutettu käteisellä"
+    return False
 
 
 def fifo(st: Statement, warnings: list[str], choices: dict | None = None) -> list[Match]:
@@ -403,9 +523,12 @@ def opening_lots(st: Statement) -> list[dict]:
     rows = opening_summary(ms, _ibkr_backout(ms, ru))
     for r in rows:
         r["kind"] = "stock"
+    ca, rename = corporate_events(st)
     for r in rows:   # the whole year-start position (the user enters lots for all of it)
-        legs = [x["qty"] for x in list(st.history_legs) + list(st.stock_legs) if x["symbol"] == r["symbol"]]
-        r["opening_qty"] = end_qty.get(r["symbol"], 0.0) - sum(legs)
+        legs = [x["qty"] for x in list(st.history_legs) + list(st.stock_legs)
+                if rename.get(x["symbol"], x["symbol"]) == r["symbol"]]
+        r["opening_qty"] = (end_qty.get(r["symbol"], 0.0) - sum(legs)
+                            - sum(e["delta"] for e in ca.get(r["symbol"], []) if e["kind"] != "unknown"))
         r["ccy"] = next((x["ccy"] for x in st.stock_legs if x["symbol"] == r["symbol"]), "")
     return rows + option_opening(option_events(st, [])[0], st)
 
@@ -443,7 +566,7 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
 
     b.ru_by_symbol = {r.symbol: r.realized for r in st.ru if r.asset_class == "Stocks"}
     b.option_events, legs = option_events(st, b.warnings, s.opening_choices)
-    b.matches, b.end_lots = fifo_full(st, b.warnings, s.opening_choices, legs)
+    b.matches, b.end_lots = fifo_full(st, b.warnings, s.opening_choices, legs, b.ca_events, b.blocked)
     backout = _ibkr_backout(b.matches, b.ru_by_symbol)
     apply_presumption(b.matches, s.use_presumption)
     b.opening = [dict(o, kind="stock") for o in opening_summary(b.matches, backout)]
@@ -451,7 +574,7 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     if st.option_trades and not st.stock_legs:
         b.warnings.append("Optiokauppoja löytyi, mutta osakekauppoja ei — toteutusten preemiota ei voitu kohdistaa.")
     unresolved = [o["symbol"] for o in b.opening if "unresolved" in o["methods"]]
-    b.preliminary = bool(unresolved)
+    b.preliminary = bool(unresolved) or bool(b.blocked)
     if unresolved:
         b.warnings.insert(0, "KESKENERÄINEN LASKELMA: vuoden alun positioille " + ", ".join(unresolved) +
                           " ei ole valittu käsittelytapaa — hankintameno on päätelty IBKR:n luvuista. Valitse käsittely "

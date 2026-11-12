@@ -180,6 +180,18 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
                                "tämä laskelma käyttää FIFO:a, joten tulos voi poiketa IBKR:n luvuista.")
 
 
+    # ---- Corporate Actions (shares): no Symbol column — the symbol starts the description ('AAA(US…) Split 4 for 1 …')
+    for d in data("Corporate Actions"):
+        cls, desc = (d.get("Asset Category") or "").strip(), (d.get("Description") or "").strip()
+        if cls != "Stocks" or not desc or desc.startswith("Total"):
+            continue
+        ccy, proceeds = d.get("Currency", ""), to_num(d.get("Proceeds"))
+        rate = 1.0 if ccy == base else (abs(ratio[ccy]) if ratio and ratio.get(ccy) else None)
+        st.corporate_actions.append({"date": (d.get("Date/Time") or d.get("Report Date") or "")[:10],
+                                     "symbol": desc.split("(")[0].strip(), "description": desc,
+                                     "qty": to_num(d.get("Quantity")), "ccy": ccy,
+                                     "proceeds_eur": proceeds * rate if rate is not None else None})
+
     # ---- Cash sections
     for sec, attr in CASH_MAP.items():
         lines: list[CashLine] = []

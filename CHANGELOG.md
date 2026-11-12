@@ -14,6 +14,10 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
 - Yksityishenkilö: **hankintameno-olettama erittäin** (20 %, 40 % jos omistettu vähintään 10 vuotta). Olettama
   lasketaan bruttomyyntihinnasta (ennen myyntiprovisiota ja myyntioption preemiota), eikä sen kanssa vähennetä kuluja.
   Laskelma käyttää sitä, kun se antaa pienemmän voiton; se ei synnytä eikä kasvata tappiota. Valinta asetuksissa.
+- Yksityishenkilö: **yritystapahtumat FIFO:ssa** (Activity Statement CSV). Split, osakkeiden yhdistely ja osake- tai
+  rahastoanti jakavat hankintamenon uusille osakkeille, ja omistusaika säilyy. Yhdistelyssä murto-osista maksettu
+  käteinen käsitellään luovutuksena. Jos tapahtuman tyyppiä ei tunnisteta, osakkeen laskenta keskeytyy ja tulos
+  merkitään keskeneräiseksi (ei hiljaista virhetäsmäytystä).
 
 **Muutettu**
 - OmaVero-kentät: luovutushinnat ovat bruttomyyntihintoja ja myyntiprovisiot ovat kuluissa (aiemmin myyntiprovisio

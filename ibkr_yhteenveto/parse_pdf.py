@@ -93,6 +93,9 @@ def parse_pdf(path: str | Path | bytes, name: str | None = None) -> Statement:
     _forex_bal(body("Forex Balances"), st)
     _trades(body("Trades"), st)
     _stock_legs(body("Trades"), body("Forex P/L Details"), st)
+    if body("Corporate Actions"):
+        st.warnings.append("PDF:ssä on yritystapahtumia (Corporate Actions); ne luetaan vain Activity Statement CSV:stä "
+                           "— lisää CSV, jotta splitit ja osakeannit huomioidaan FIFO-laskennassa.")
     for name, attr in [("Interest", "interest"), ("Fees", "fees"), ("Withholding Tax", "withholding"),
                        ("Dividends", "dividends"), ("Deposits & Withdrawals", "deposits"),
                        ("Transaction Fees", "transaction_fee_lines")]:

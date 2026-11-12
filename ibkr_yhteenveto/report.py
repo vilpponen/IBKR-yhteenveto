@@ -175,6 +175,11 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
               sum(e["premium_eur"] for e in pb.option_events if e["symbol"] == o["symbol"]), "–",
               ", ".join(SOURCES.get(k, k) for k in o["methods"]) + " — preemio"]
              for o in pb.opening], [2, 3, 4])
+    if pb.ca_events:
+        res["tabs"]["Yritystapahtumat"] = _t(
+            ["Päivä", "Symboli", "Kerroin", "Määrän muutos", "Käteinen", "Käsittely"],
+            [[e["date"], e["symbol"], "–" if e["factor"] is None else round(e["factor"], 4), e["delta"],
+              e["proceeds_eur"] if e["proceeds_eur"] is not None else "–", e["handled"]] for e in pb.ca_events], [4])
     if pb.option_events:
         res["tabs"]["Toteutetut optiot"] = _t(
             ["Päivä", "Optio", "Kohde-etuus", "Sopimuksia", "Preemio", "Käsittely"],

@@ -27,7 +27,7 @@ palvelimella muiden käyttöön; silloin sivu kertoo käyttäjälle, että rapor
 > ℹ️ **Kenelle työkalu sopii nyt.** Työkalu on tällä hetkellä tehty ensisijaisesti **aktiiviselle kaupankävijälle,
 > jonka salkku on vuoden alussa tyhjä** (positiot avataan ja suljetaan saman vuoden aikana). Aiempina vuosina
 > ostetuille erille sovellus kysyy käsittelytavan ([Vuoden alun positiot](#vuoden-alun-positiot)). Asetetut optiot
-> (toteutusvelvoite, vuodenvaihde), yritystapahtumat (esim. splitit) ja kryptot ovat vielä rajallisesti tuettuja —
+> (toteutusvelvoite, vuodenvaihde), harvinaisemmat yritystapahtumat (esim. spinoffit, yritysostot) ja kryptot ovat vielä rajallisesti tuettuja —
 > laskelma varoittaa niistä. Työkalua kehitetään palautteen perusteella
 > ([Palaute](#palaute)).
 
@@ -170,6 +170,8 @@ kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä rapor
   huomioida (Verohallinto). Kauppakohtainen erittely tarvitsee Activity Statement CSV:n.
 * **Ulkomaan pääomatulot (16B):** osingot (85 % veronalaista), lähdeveron hyvitys sopimusrajaan asti, korot.
 * **Vähennykset:** marginaalilainan korot, IBKR-kulut, aiempien vuosien vahvistetut tappiot.
+* **Yritystapahtumat:** split, yhdistely ja osake- tai rahastoanti (CSV:stä); tuntematon tapahtuma keskeyttää
+  kyseisen osakkeen laskennan ja merkitsee tuloksen keskeneräiseksi.
 * **Hankintameno-olettama** erittäin: 20 % (40 %, jos omistettu vähintään 10 vuotta) bruttomyyntihinnasta, kun se
   antaa pienemmän voiton kuin todelliset kulut; ei koskaan synnytä tappiota. Voi kytkeä pois asetuksista.
 * **Pienten luovutusten verovapaus** (luovutushinnat ≤ 1 000 €), pääomatulovero 30 % / 34 % (> 30 000 €).
