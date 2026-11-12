@@ -18,7 +18,7 @@ from datetime import date
 
 from .books import _is_div_wht, _is_pil, _div_country, wht_country
 from .model import Statement
-from .parse_common import CFD_CLASSES, OPTION_CLASSES, codes
+from .parse_common import CFD_CLASSES, CRYPTO_CLASSES, OPTION_CLASSES, codes
 
 
 def _fi(x: float, d: int = 2) -> str:
@@ -128,6 +128,7 @@ class PBooks:
     warnings: list[str] = field(default_factory=list)
     ru_by_symbol: dict[str, float] = field(default_factory=dict)
     opening: list[dict] = field(default_factory=list)    # year-start lots consumed this year + how they were handled
+    crypto_matches: list[Match] = field(default_factory=list)  # virtuaalivaluuttojen luovutukset (FIFO per coin)
     option_events: list[dict] = field(default_factory=list)  # exercises / assignments and how the premium was used
     ca_events: list[dict] = field(default_factory=list)      # corporate actions applied to share lots
     blocked: list[str] = field(default_factory=list)         # symbols whose FIFO stopped at an unknown corporate action
@@ -333,7 +334,7 @@ def corporate_events(st: Statement) -> tuple[dict[str, list[dict]], dict[str, st
 
 def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None,
               legs_override: list[dict] | None = None, ca_log: list[dict] | None = None,
-              blocked: list[str] | None = None) -> tuple[list[Match], list[dict]]:
+              blocked: list[str] | None = None, classes: frozenset = frozenset({"Stocks"})) -> tuple[list[Match], list[dict]]:
     """FIFO per symbol over history legs (earlier statements) + this period's legs.
 
     Returns this period's disposals and the lots still open at period end. The year-start position (end holding
@@ -341,7 +342,7 @@ def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None,
     choices = choices or {}
     end_qty = defaultdict(float)
     for p in st.positions:
-        if p.asset_class == "Stocks":
+        if p.asset_class in classes:
             end_qty[p.symbol] += p.quantity
     start = st.period_start or ""
     legs_by_sym = defaultdict(list)
@@ -462,6 +463,18 @@ def _apply_ca(sym: str, ev: dict, lots: deque, in_period: bool, out: list, warni
     return False
 
 
+def crypto_fifo(st: Statement, warnings: list[str], choices: dict | None = None) -> tuple[list[Match], list[dict]]:
+    """Crypto assets: FIFO per coin like shares (Vero: virtuaalivaluutat are disposed in acquisition order),
+    with year-start lots, IBKR back-out, hankintameno-olettama. No corporate actions or option effects."""
+    if not st.crypto_legs:
+        return [], []
+    from dataclasses import replace
+    cst = replace(st, stock_legs=list(st.crypto_legs), history_legs=[], corporate_actions=[], option_trades=[])
+    ms, end = fifo_full(cst, warnings, choices, list(st.crypto_legs), classes=frozenset(CRYPTO_CLASSES))
+    _ibkr_backout(ms, {r.symbol: r.realized for r in st.ru if r.asset_class in CRYPTO_CLASSES})
+    return ms, end
+
+
 def fifo(st: Statement, warnings: list[str], choices: dict | None = None) -> list[Match]:
     _, legs = option_events(st, [], choices)
     return fifo_full(st, warnings, choices, legs)[0]
@@ -545,7 +558,15 @@ def opening_lots(st: Statement) -> list[dict]:
         r["opening_qty"] = (end_qty.get(r["symbol"], 0.0) - sum(legs)
                             - sum(e["delta"] for e in ca.get(r["symbol"], []) if e["kind"] != "unknown"))
         r["ccy"] = next((x["ccy"] for x in st.stock_legs if x["symbol"] == r["symbol"]), "")
-    return rows + option_opening(option_events(st, [])[0], st)
+    cm, _ = crypto_fifo(st, [])
+    crypto_rows = opening_summary(cm, {})
+    for r in crypto_rows:
+        r["kind"] = "crypto"
+        r["ibkr_suggestion_eur"] = sum(m.cost for m in cm if m.symbol == r["symbol"] and m.method == "unresolved")
+        r["opening_qty"] = (sum(p.quantity for p in st.positions if p.symbol == r["symbol"])
+                            - sum(x["qty"] for x in st.crypto_legs if x["symbol"] == r["symbol"]))
+        r["ccy"] = next((x["ccy"] for x in st.crypto_legs if x["symbol"] == r["symbol"]), "")
+    return rows + option_opening(option_events(st, [])[0], st) + crypto_rows
 
 
 def option_opening(events: list[dict], st: Statement) -> list[dict]:
@@ -601,6 +622,13 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     apply_presumption(b.matches, s.use_presumption)
     b.opening = [dict(o, kind="stock") for o in opening_summary(b.matches, backout)]
     b.opening += option_opening(b.option_events, st)
+    b.crypto_matches, crypto_end = crypto_fifo(st, b.warnings, s.opening_choices)
+    apply_presumption(b.crypto_matches, s.use_presumption)
+    b.end_lots += crypto_end
+    b.opening += [dict(o, kind="crypto") for o in opening_summary(b.crypto_matches, {})]
+    if b.crypto_matches and any(not x.get("exact") for x in st.crypto_legs):
+        b.warnings.append("Kryptokaupat muunnettu euroiksi keskikurssilla (IBKR:n luokkasummista); tarkista "
+                          "kauppakohtaiset kurssit tarvittaessa.")
     if st.option_trades and not st.stock_legs:
         b.warnings.append("Optiokauppoja löytyi, mutta osakekauppoja ei — toteutusten preemiota ei voitu kohdistaa.")
     unresolved = [o["symbol"] for o in b.opening if "unresolved" in o["methods"]]
@@ -650,19 +678,30 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     v["fx_losses"] = sum(r.loss for r in fx) if s.include_fx else 0.0
     v["fx_memo"] = sum(r.realized for r in fx)
     _cfd(b)
-    other = [r for r in st.ru if r.asset_class not in DERIVATIVE_CLASSES | CFD_CLASSES | {"Stocks", "Forex"}]
+    C = b.crypto_matches
+    v["crypto_proceeds"] = sum(m.proceeds for m in C)
+    v["crypto_cost"] = sum(m.proceeds - m.result for m in C)
+    v["crypto_cost_actual"] = sum(m.cost for m in C)
+    v["crypto_gains"] = sum(m.result for m in C if m.result > 0)
+    v["crypto_losses"] = sum(m.result for m in C if m.result < 0)
+    if any(r.asset_class in CRYPTO_CLASSES for r in st.ru) and not st.crypto_legs:
+        b.warnings.append("Kryptovaroja on R&U-raportissa, mutta kauppariviä ei löytynyt — lisää Activity Statement CSV; "
+                          "kryptot puuttuvat laskelmasta.")
+    other = [r for r in st.ru if r.asset_class not in DERIVATIVE_CLASSES | CFD_CLASSES | CRYPTO_CLASSES | {"Stocks", "Forex"}]
     if other:
         b.warnings.append("Tuntemattomat omaisuusluokat (ei mukana): " + ", ".join(sorted({r.asset_class for r in other})))
 
-    # small disposals (securities)
-    v["small_exempt"] = 1.0 if 0 < v["sec_proceeds"] <= s.small_limit else 0.0
+    # small disposals: all sale prices of the year together (securities + crypto)
+    tot_proceeds = v["sec_proceeds"] + v["crypto_proceeds"]
+    v["small_exempt"] = 1.0 if 0 < tot_proceeds <= s.small_limit else 0.0
     sec_g, sec_l = v["sec_gains"], v["sec_losses"]
+    cr_g, cr_l = v["crypto_gains"], v["crypto_losses"]
     if v["small_exempt"]:
-        sec_g = 0.0
-        if v["sec_cost_actual"] <= s.small_limit:
-            sec_l = 0.0
-    v["disp_gains"] = sec_g + v["der_gains"] + v["fx_gains"]
-    v["disp_losses"] = sec_l + v["der_losses"] + v["fx_losses"]
+        sec_g = cr_g = 0.0
+        if v["sec_cost_actual"] + v["crypto_cost_actual"] <= s.small_limit:
+            sec_l = cr_l = 0.0
+    v["disp_gains"] = sec_g + cr_g + v["der_gains"] + v["fx_gains"]
+    v["disp_losses"] = sec_l + cr_l + v["der_losses"] + v["fx_losses"]
     v["disp_net"] = v["disp_gains"] + v["disp_losses"]
 
     # dividends / interest / fees
@@ -794,6 +833,12 @@ def omavero_fields(b: PBooks) -> list[tuple[str, str, float, str]]:
     ]
     if v["cf_used"]:
         rows.append(("Vähennykset", "Aiempien vuosien vahvistetut luovutustappiot", v["cf_used"], ""))
+    if b.crypto_matches:
+        sec = "Virtuaalivaluutat (OmaVero)"
+        rows += [(sec, "Kryptovarat — luovutushinnat yhteensä", v["crypto_proceeds"], "Bruttomyyntihinnat"),
+                 (sec, "Kryptovarat — hankintamenot ja kulut (tai hankintameno-olettamat) yhteensä", v["crypto_cost"], "FIFO"),
+                 (sec, "Kryptovarat — luovutusvoitot", v["crypto_gains"], ""),
+                 (sec, "Kryptovarat — luovutustappiot", -v["crypto_losses"], "")]
     if v.get("der_losses_nondeductible"):
         rows.append(("Ei ilmoiteta (tieto)", "Vähennyskelvottomat johdannaistappiot (ei säännelty markkina)",
                      -v["der_losses_nondeductible"], "Vero 48914: tappio vähennyskelpoinen vain säännellyllä markkinalla"))

@@ -26,6 +26,10 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
 - Yksityishenkilö: **valinnainen EKP-kurssitila**. Kun EKP:n kurssitiedosto (`eurofxref-hist.csv`) lisätään
   raporttien kanssa, kaupat muunnetaan EKP:n viitekurssilla selvityspäivältä, ja tulos näyttää eron IBKR:n kursseihin.
   Ei verkkoyhteyksiä; oletuksena edelleen IBKR:n kauppakohtaiset EUR-määrät.
+- Yksityishenkilö: **kryptovarat** (IBKR:n Crypto-luokka, Activity Statement CSV). Luovutukset FIFO-järjestyksessä
+  kolikoittain, hankintameno-olettama kuten osakkeilla, oma kohta OmaVero-kentissä ja työkirjassa. 1 000 euron
+  pienten luovutusten raja lasketaan arvopapereiden ja kryptovarojen luovutushinnoista yhteensä. Osakeyhtiössä
+  kryptot ovat muuta omaisuutta (kuten aiemmin).
 
 **Muutettu**
 - OmaVero-kentät: luovutushinnat ovat bruttomyyntihintoja ja myyntiprovisiot ovat kuluissa (aiemmin myyntiprovisio

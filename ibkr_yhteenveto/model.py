@@ -120,6 +120,8 @@ class Statement:
     ecb_rates: dict[str, dict[str, float]] = field(default_factory=dict)
     # listing exchange per symbol (CSV Financial Instrument Information 'Listing Exch')
     listing_exch: dict[str, str] = field(default_factory=dict)
+    # crypto trade legs (CSV Trades, Crypto class) — same shape as stock_legs
+    crypto_legs: list[dict] = field(default_factory=list)
     # corporate actions on shares (CSV): {"date","symbol","description","qty","proceeds_eur","ccy"}
     corporate_actions: list[dict] = field(default_factory=list)
     # CSV stock order rows {"date","time","symbol","qty","comm","ccy"} — to give PDF lots their share of the commission
@@ -174,6 +176,7 @@ class Statement:
         st.trade_rows = [dict(x) for x in d.get("trade_rows", [])]
         st.corporate_actions = [dict(x) for x in d.get("corporate_actions", [])]
         st.listing_exch = dict(d.get("listing_exch", {}))
+        st.crypto_legs = [dict(x) for x in d.get("crypto_legs", [])]
         st.ecb_rates = {k: dict(v) for k, v in d.get("ecb_rates", {}).items()}
         st.exercise_rows = [dict(x) for x in d.get("exercise_rows", [])]
         st.history_periods = list(d.get("history_periods", []))
@@ -194,7 +197,7 @@ class Statement:
                 d.setdefault(k, v)
         for f in ("ru", "positions", "forex_balances", "interest", "fees", "withholding",
                   "dividends", "deposits", "transaction_fee_lines", "stock_legs", "cfd_trades",
-                  "option_trades", "exercise_rows", "trade_rows", "corporate_actions"):
+                  "option_trades", "exercise_rows", "trade_rows", "corporate_actions", "crypto_legs"):
             if not getattr(self, f) and getattr(other, f):
                 setattr(self, f, getattr(other, f))
         # exact per-trade EUR legs (PDF Forex P/L Details) beat CSV legs converted at an average rate

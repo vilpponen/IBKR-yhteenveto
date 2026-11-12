@@ -21,6 +21,8 @@ ASSET_CLASSES = {
 }
 # CFDs (hinnanerosopimukset): for individuals gains are capital income, losses are not deductible (Vero)
 CFD_CLASSES = {"CFDs", "Index CFDs", "Forex CFDs"}
+# Crypto assets (IBKR via Paxos / Zero Hash / OSL)
+CRYPTO_CLASSES = {"Crypto", "Cryptocurrency"}
 # Options on shares/indices (exercise/assignment delivers shares or cash). Futures options are not handled here.
 OPTION_CLASSES = {"Equity and Index Options", "Options", "Index Options"}
 # IBKR Codes table: tax lot-matching methods other than FIFO

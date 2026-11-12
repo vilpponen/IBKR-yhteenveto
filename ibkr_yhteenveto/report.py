@@ -121,8 +121,8 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
         "heading": f"{s.name or st.name} · {st.account} · {st.period_start} – {st.period_end} · henkilöverotus",
         "caption": f"Lähteet: {', '.join(st.source_files)} · FIFO-osumia {_fi(len(pb.matches), 0)}",
         "metrics": [
-            ["Luovutusvoitot", v["sec_gains"] + v["der_gains"] + v["fx_gains"]],
-            ["Luovutustappiot", v["sec_losses"] + v["der_losses"] + v["fx_losses"]],
+            ["Luovutusvoitot", v["sec_gains"] + v["der_gains"] + v["fx_gains"] + v["crypto_gains"]],
+            ["Luovutustappiot", v["sec_losses"] + v["der_losses"] + v["fx_losses"] + v["crypto_losses"]],
             ["Pääomatulo (IBKR)", v["capital_income"]], ["Pääomatulovero, arvio", v["tax_net"]],
         ],
         "ok": None, "ok_text": "",
@@ -137,6 +137,7 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
             "Pääomatulolaskelma": _t(["Erä", "EUR"], [
                 ["Arvopapereiden voitot − tappiot (FIFO)", 0.0 if v["small_exempt"] else v["sec_net"]],
                 ["Johdannaisten voitot − tappiot", v["der_gains"] + v["der_losses"]],
+                ["Kryptovarat voitot − tappiot", 0.0 if v["small_exempt"] else v["crypto_gains"] + v["crypto_losses"]],
                 ["Valuutat", v["fx_gains"] + v["fx_losses"]],
                 ["Osingot × 85 %", v["div_taxable"]], ["Payment in lieu", v["pil_taxable"]],
                 ["Korkotulot", v["int_income"]], ["CFD-voitot (muu pääomatulo)", v["cfd_gains"]],
@@ -178,6 +179,10 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
               sum(e["premium_eur"] for e in pb.option_events if e["symbol"] == o["symbol"]), "–",
               ", ".join(SOURCES.get(k, k) for k in o["methods"]) + " — preemio"]
              for o in pb.opening], [2, 3, 4])
+    if pb.crypto_matches:
+        res["tabs"]["Kryptovarat"] = _t(["Symboli", "Myyntipäivä", "Ostopäivä", "Määrä", "Luovutushinta", "Vähennys", "Tulos", "Lähde"],
+                                        [[m.symbol, m.sale_date, m.buy_date, m.qty, m.proceeds, m.proceeds - m.result,
+                                          m.result, m.source] for m in pb.crypto_matches], [4, 5, 6])
     if pb.ca_events:
         res["tabs"]["Yritystapahtumat"] = _t(
             ["Päivä", "Symboli", "Kerroin", "Määrän muutos", "Käteinen", "Käsittely"],

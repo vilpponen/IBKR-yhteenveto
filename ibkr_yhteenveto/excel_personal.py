@@ -69,31 +69,48 @@ def write_personal_workbook(b: PBooks) -> bytes:
     lu.header(["Symboli", "Myyntipäivä", "Ostopäivä", "Määrä", "Luovutushinta €", "Todellinen hankintameno ja kulut €",
                "Voitto/tappio €", "Lähde", "Short", "Sis. optiopreemio €", "Olettama-%", "Olettama €",
                "Käytetty vähennys €"])
-    r0 = lu.r
-    for m in b.matches:
-        r = lu.r
-        if m.method == "olettama":          # user's choice: only the olettama (actual cost unknown)
-            ded = f"=L{r}"
-        elif m.presumption_rate > 0:
-            ded = f'=IF({ref["olet"]}="Kyllä",MAX(F{r},L{r}),F{r})'
-        else:
-            ded = f"=F{r}"
-        lu.row([m.symbol, m.sale_date, m.buy_date, m.qty, round(m.proceeds, 2),
-                None if m.method == "olettama" else round(m.cost, 2), f"=E{r}-M{r}",
-                m.source, "Kyllä" if m.short else "", round(m.premium, 2) if m.premium else None,
-                m.presumption_rate, f"=E{r}*K{r}", ded],
-               ["in", "in", "in", "in", "in", "in", "f", "t", "t", "in", "in", "f", "f"],
-               fmt=[None, None, None, "#,##0.####", None, None, None, None, None, None, PCT])
-    r1 = max(lu.r - 1, r0)
-    LU = dict(sym=f"'{lu.name}'!$A${r0}:$A${r1}", L=f"'{lu.name}'!$E${r0}:$E${r1}",
-              H=f"'{lu.name}'!$M${r0}:$M${r1}", R=f"'{lu.name}'!$G${r0}:$G${r1}")
-    rt = lu.row(["Yhteensä", None, None, None, f"=SUM(E{r0}:E{r1})", f"=SUM(F{r0}:F{r1})", f"=SUM(G{r0}:G{r1})",
-                 None, None, None, None, f"=SUM(L{r0}:L{r1})", f"=SUM(M{r0}:M{r1})"], bold=True, total=True)
-    ref.update(L=lu.q(f"E{rt}"), H=lu.q(f"M{rt}"), HA=lu.q(f"F{rt}"))
-    rt = lu.row(["Voitot", None, None, None, None, None, f'=SUMIF(G{r0}:G{r1},">0")'], bold=True)
-    ref["G"] = lu.q(f"G{rt}")
-    rt = lu.row(["Tappiot", None, None, None, None, None, f'=SUMIF(G{r0}:G{r1},"<0")'], bold=True)
-    ref["T"] = lu.q(f"G{rt}")
+    def lots(sh, matches, key=""):
+        """FIFO lots with live formulas; returns ranges for summaries and stores totals in ref (prefixed)."""
+        r0 = sh.r
+        for m in matches:
+            r = sh.r
+            if m.method == "olettama":          # user's choice: only the olettama (actual cost unknown)
+                ded = f"=L{r}"
+            elif m.presumption_rate > 0:
+                ded = f'=IF({ref["olet"]}="Kyllä",MAX(F{r},L{r}),F{r})'
+            else:
+                ded = f"=F{r}"
+            sh.row([m.symbol, m.sale_date, m.buy_date, m.qty, round(m.proceeds, 2),
+                    None if m.method == "olettama" else round(m.cost, 2), f"=E{r}-M{r}",
+                    m.source, "Kyllä" if m.short else "", round(m.premium, 2) if m.premium else None,
+                    m.presumption_rate, f"=E{r}*K{r}", ded],
+                   ["in", "in", "in", "in", "in", "in", "f", "t", "t", "in", "in", "f", "f"],
+                   fmt=[None, None, None, "#,##0.####", None, None, None, None, None, None, PCT])
+        r1 = max(sh.r - 1, r0)
+        rng = dict(sym=f"'{sh.name}'!$A${r0}:$A${r1}", L=f"'{sh.name}'!$E${r0}:$E${r1}",
+                   H=f"'{sh.name}'!$M${r0}:$M${r1}", R=f"'{sh.name}'!$G${r0}:$G${r1}")
+        rt = sh.row(["Yhteensä", None, None, None, f"=SUM(E{r0}:E{r1})", f"=SUM(F{r0}:F{r1})", f"=SUM(G{r0}:G{r1})",
+                     None, None, None, None, f"=SUM(L{r0}:L{r1})", f"=SUM(M{r0}:M{r1})"], bold=True, total=True)
+        ref.update({key + "L": sh.q(f"E{rt}"), key + "H": sh.q(f"M{rt}"), key + "HA": sh.q(f"F{rt}")})
+        rt = sh.row(["Voitot", None, None, None, None, None, f'=SUMIF(G{r0}:G{r1},">0")'], bold=True)
+        ref[key + "G"] = sh.q(f"G{rt}")
+        rt = sh.row(["Tappiot", None, None, None, None, None, f'=SUMIF(G{r0}:G{r1},"<0")'], bold=True)
+        ref[key + "T"] = sh.q(f"G{rt}")
+        return rng
+
+    LU = lots(lu, b.matches)
+    if b.crypto_matches:
+        kr = Sheet(wb, "Kryptovarat (FIFO)", [18, 12, 12, 14, 16, 16, 16, 34, 8, 16, 10, 14, 16])
+        kr.title("Kryptovarojen luovutukset hankintaerittäin (FIFO)",
+                 [sub, "Virtuaalivaluutat: luovutusvoitto/-tappio, FIFO kolikoittain, hankintameno-olettama kuten "
+                       "osakkeilla (Verohallinto: virtuaalivaluuttojen verotus). Ilmoitetaan OmaVerossa omana kohtanaan.",
+                  "EUR-muunnos IBKR:n luokkasummista (keskikurssi), ellei kauppa ole euroissa."])
+        kr.header(["Symboli", "Myyntipäivä", "Ostopäivä", "Määrä", "Luovutushinta €", "Todellinen hankintameno ja kulut €",
+                   "Voitto/tappio €", "Lähde", "Short", "Sis. optiopreemio €", "Olettama-%", "Olettama €",
+                   "Käytetty vähennys €"])
+        lots(kr, b.crypto_matches, "C")
+    else:
+        ref.update(CL="0", CH="0", CHA="0", CG="0", CT="0")
 
     # ---------------------------------------------------------------- Vuoden alun erät
     if va:
@@ -274,14 +291,17 @@ def write_personal_workbook(b: PBooks) -> bytes:
             ref[key] = po.q(f"$B${r}")
         return f"B{r}"
     po.section("LUOVUTUKSET", 3)
-    ex = prow("Pienten luovutusten verovapaus sovelletaan?", f'=IF(AND({ref["L"]}>0,{ref["L"]}<={ref["small"]}),"Kyllä","Ei")',
+    ex = prow("Pienten luovutusten verovapaus sovelletaan?",
+              f'=IF(AND({ref["L"]}+{ref["CL"]}>0,{ref["L"]}+{ref["CL"]}<={ref["small"]}),"Kyllä","Ei")',
               "Luovutushinnat ≤ raja")
     g1 = prow("Arvopapereiden voitot", f'=IF({ex}="Kyllä",0,{ref["G"]})', "Luovutukset (FIFO)", "link")
-    l1 = prow("Arvopapereiden tappiot", f'=IF(AND({ex}="Kyllä",{ref["HA"]}<={ref["small"]}),0,{ref["T"]})', "", "link")
+    l1 = prow("Arvopapereiden tappiot", f'=IF(AND({ex}="Kyllä",{ref["HA"]}+{ref["CHA"]}<={ref["small"]}),0,{ref["T"]})', "", "link")
+    g4 = prow("Kryptovarojen voitot", f'=IF({ex}="Kyllä",0,{ref["CG"]})', "Kryptovarat (FIFO)", "link")
+    l4 = prow("Kryptovarojen tappiot", f'=IF(AND({ex}="Kyllä",{ref["HA"]}+{ref["CHA"]}<={ref["small"]}),0,{ref["CT"]})', "", "link")
     g2 = prow("Johdannaisten voitot", f"={ref['DG']}", "Johdannaiset", "link")
     l2 = prow("Johdannaisten tappiot", f"={ref['DL']}", "Johdannaiset", "link")
     g3 = prow("Valuutat (jos mukana)", f"={ref['FXG']}+{ref['FXL']}", "Johdannaiset-välilehti", "link")
-    dn = prow("Luovutusvoitot − tappiot", f"={g1}+{l1}+{g2}+{l2}+{g3}", bold=True, total=True)
+    dn = prow("Luovutusvoitot − tappiot", f"={g1}+{l1}+{g2}+{l2}+{g3}+{g4}+{l4}", bold=True, total=True)
     po.section("MUUT PÄÄOMATULOT", 3)
     d1 = prow("Osingot × veronalainen osuus", f"={ref['div']}*{ref['divsh']}", "85 % listatuista yhtiöistä")
     d2 = prow("Payment in lieu × veronalainen osuus", f"={ref['pil']}*{ref['pilsh']}")
@@ -316,6 +336,10 @@ def write_personal_workbook(b: PBooks) -> bytes:
         "Johdannaiset (futuurit, optiot) — voitot": f"={ref['DG']}",
         "Johdannaiset (futuurit, optiot) — tappiot": f"=-{ref['DL']}",
         "Muut pääomatulot — CFD-voitot": f"={ref['CFG']}",
+        "Kryptovarat — luovutushinnat yhteensä": f"={ref['CL']}",
+        "Kryptovarat — hankintamenot ja kulut (tai hankintameno-olettamat) yhteensä": f"={ref['CH']}",
+        "Kryptovarat — luovutusvoitot": f"={ref['CG']}",
+        "Kryptovarat — luovutustappiot": f"=-{ref['CT']}",
         "Vähennyskelvottomat CFD-tappiot (ei huomioida)": f"=-{ref['CFL']}",
         "Korot tulonhankkimisvelasta (marginaalilaina)": f"={ref['ie']}",
         "Muut tulonhankkimismenot (IBKR-kulut)": f"={ref['fees']}",
