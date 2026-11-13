@@ -116,7 +116,21 @@ rekisteriä perustettaessa, ellei rivillä toisin mainita.
 | HEN-11 | OmaVero-kentissä luovutushinnat ovat bruttomyyntihintoja ja myyntiprovisiot kuluissa. | Voimassa (62N-89) |
 | HEN-12 | Asetetun option toteutusvelvoite (koodi A): osakkeiden hintaa ei oikaista preemiolla, ja laskelma varoittaa. | Korvattu 13.11.2026 → OPT-H4 (samana vuonna asetettu) ja OPT-H5 (aiempana vuonna asetettu) |
 
+## 5. Laskenta ja syöte (kaikki tilat)
+
+Koodi: `ibkr_yhteenveto/num.py`, `parse_common.py`, `parse_csv.py`, `parse_pdf.py`, `books.py`, `personal.py`,
+`report.py`, `server.py`. Omistajan päätökset 13.11.2026 (62N-97).
+
+| Tunnus | Päätös | Tila |
+|---|---|---|
+| LAS-1 | Rahasummat ovat `Decimal`-lukuja täydellä tarkkuudella koko laskennan läpi. Pyöristys vain tulostuksessa (näkymä, raportit) senteiksi, puolikkaat parilliseen (half even, 10,005 → 10,00). Excel-työkirjan soluihin kirjoitetaan täysi tarkkuus; Excel näyttää sentit. | Voimassa (62N-97) |
+| LAS-2 | Toleranssit: sisäiset täsmäytykset (kirjanpidon tulos ja NAV-muutos, tase, tilikartta) enintään 0,000001 € (laskennallinen jäännös); vertailu IBKR:n omiin Change in NAV -summiin 0,01 €. | Voimassa (62N-97) |
+| LAS-3 | Lukukelvoton luku, NaN, ääretön, virheellinen päivämäärä, negatiivinen määrä tai hankintameno vuoden alun erässä tai negatiivinen asetus pysäyttää laskennan ja kertoo tiedoston, osion, rivin ja arvon. Tyhjä solu ja IBKR:n "--" = 0; myynnin negatiivinen määrä on sallittu. | Voimassa (62N-97) |
+| LAS-4 | Laskenta on paikallista: ei verkkoyhteyksiä (testi). Riippuvuudet asennetaan vain lukitusta tiedostosta (tarkat versiot ja SHA-256-tiivisteet, `pip install --require-hashes`); lukitus päivitetään käsin julkaisun valmistelussa (`scripts/lock_deps.sh`). | Voimassa (62N-97) |
+
 ## Muutosloki
+
+- 13.11.2026 — 62N-97 toteutettu (dev): uusi osio 5, `LAS-1`…`LAS-4` → Voimassa (omistajan päätökset 13.11.2026).
 
 - 13.11.2026 — 62N-100 toteutettu (dev): `OPT-Y8` käyttäjän valintana optioittain (tila pysyy Ehdotus);
   `YHT-6` tarkennettu: asetettujen optioiden tappio omalla rivillään.
