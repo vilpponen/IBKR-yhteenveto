@@ -8,7 +8,9 @@ keskimmäinen numero (MINOR) nousee, kun tulee uusi toiminto tai **mikä tahansa
 lukuja** — jos se on noussut, laske vanha työkirja uudelleen. Viimeinen numero (PATCH) nousee muutoksista, jotka eivät
 koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on merkitty versio, jolla luvut on laskettu.
 
-## Tulossa (dev)
+## 2026-11-13
+
+### 0.11.0 — Tarkka laskenta, syötteen tarkistus ja lukitut riippuvuudet ([#11](https://github.com/vilpponen/IBKR-yhteenveto/pull/11))
 
 **Uutta**
 - **Tarkat rahasummat:** kaikki laskenta tehdään desimaalilukuina täydellä tarkkuudella (ei liukulukuja), ja summat
@@ -32,8 +34,6 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
   (kehäviittaus), jolloin Excel varoitti ja osa tilikartan tarkistuksista jäi laskematta. Tyhjään osioon tulee nyt
   rivi "(ei rivejä)".
 - Excel-solujen numeromuotoilu säilyy desimaaliluvuilla.
-
-## 2026-11-13
 
 ### 0.10.0 — Hankintameno-olettama, kryptovarat ja asetetut optiot ([#10](https://github.com/vilpponen/IBKR-yhteenveto/pull/10))
 
