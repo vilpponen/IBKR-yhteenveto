@@ -135,7 +135,7 @@ class Handler(BaseHTTPRequestHandler):
                         company=o.get("name", ""), share_category=o.get("share_cat", "muu omaisuus"),
                         transaction_fees_override=-abs(ftt) if ftt else None,
                         opening_writedowns=f(o.get("wd_open")), opening_unbooked_gains=f(o.get("ug_open")),
-                        evl8a_carryforward=f(o.get("cf")), credit_interest_wht=bool(o.get("int_credit")),
+                        evl8a_carryforward=f(o.get("cf")), wopt_premium_carry=f(o.get("wopt_cf")), credit_interest_wht=bool(o.get("int_credit")),
                         etf_symbols={x.strip() for x in str(o.get("etfs", "")).split(",") if x.strip()}))
                 res["xlsx"] = base64.b64encode(xlsx).decode()
                 res["version"] = __version__

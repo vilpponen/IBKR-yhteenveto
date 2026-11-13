@@ -178,6 +178,12 @@ def write_personal_workbook(b: PBooks) -> bytes:
         note = (ex or "tuntematon") + (f" — ei säännelty: tappio {_fi(-r_.loss)} € vähennyskelvoton" if nd and r_.loss else "")
         de.row([r_.asset_class, r_.symbol, r_.profit, 0.0 if nd else r_.loss, f"=C{r}+D{r}", note],
                ["in", "in", "in", "in", "f", "t"])
+    for w in b.wopt_rows:      # written options: adjustments to IBKR's realized results (decisions OPT-H1/H6/H7)
+        r = de.r
+        on_loss = w["rule"] == "OPT-H6" and w["symbol"] not in b.nondeductible
+        de.row([f"Asetettu optio ({w['rule']})", w["symbol"], None if on_loss else round(w["amount"], 2),
+                round(w["amount"], 2) if on_loss else None, f"=C{r}+D{r}", f"{w['label']} · {w['date']}"],
+               ["t", "in", "in", "in", "f", "t"])
     r1 = max(de.r - 1, r0)
     rt = de.row(["Yhteensä", None, f"=SUM(C{r0}:C{r1})" if b.derivatives else 0, f"=SUM(D{r0}:D{r1})" if b.derivatives else 0,
                  f"=C{de.r}+D{de.r}"], bold=True, total=True)
@@ -398,6 +404,13 @@ def write_personal_workbook(b: PBooks) -> bytes:
                                          "viranomaisen valvomat markkinapaikat — se on yksittäisen hakijan ennakkoratkaisu. "
                                          "Markkinapaikka luetaan CSV:n Financial Instrument Information -osiosta (Listing "
                                          "Exch). Muiden markkinapaikkojen tappiot jätetään vähentämättä; voitot verotetaan."),
+        ("Asetetut optiot", "Asettajan preemio on veronalaista asetusvuonna (Vero 48914 §2.4). Vuoden lopussa avoinna "
+                            "olevan, tänä vuonna asetetun option preemio lisätään tähän vuoteen (OPT-H1). Aiempana vuonna "
+                            "asetetun option takaisinostossa tai raukeamisessa jo verotettu preemio vähennetään, jolloin "
+                            "tappioksi jää takaisinostokulu (OPT-H6). Samana vuonna asetettu ja suljettu optio: "
+                            "hankintameno-olettama 20 % preemiosta, kun se on edullisempi; takaisinostokulua ei silloin "
+                            "vähennetä (OPT-H7, OPT-H8). Toteutusvelvoite samana vuonna: preemio osakkeiden hintaan "
+                            "(OPT-H4); aiempana vuonna asetettu: ei oikaisua (OPT-H5). Perusteet: docs/PAATOSREKISTERI.md."),
         ("Optioiden toteutus", "Kun ostettu osto-optio toteutetaan, maksettu preemio kaupankäyntikuluineen kuuluu "
                                "osakkeiden hankintamenoon (KHO 2012:69); ostetun myyntioption preemio vähennetään "
                                "osakkeiden luovutushinnasta. Preemio muunnetaan euroiksi option ostopäivän kurssilla. "

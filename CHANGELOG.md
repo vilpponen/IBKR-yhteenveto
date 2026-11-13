@@ -30,6 +30,12 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
   kolikoittain, hankintameno-olettama kuten osakkeilla, oma kohta OmaVero-kentissä ja työkirjassa. 1 000 euron
   pienten luovutusten raja lasketaan arvopapereiden ja kryptovarojen luovutushinnoista yhteensä. Osakeyhtiössä
   kryptot ovat muuta omaisuutta (kuten aiemmin).
+- **Asetetut optiot.** Yksityishenkilö: vuoden lopussa avoinna olevan, tänä vuonna asetetun option preemio
+  verotetaan asetusvuonna; aiempana vuonna asetetun option takaisinostossa tai raukeamisessa jo verotettu preemio
+  vähennetään; samana vuonna asetettuun ja suljettuun optioon hankintameno-olettama 20 % preemiosta, kun edullisempi.
+  Toteutusvelvoite samana vuonna: preemio osakkeiden hintaan; aiempana vuonna asetettu: ei oikaisua. Osakeyhtiö:
+  OTC- ja yli 18 kuukauden asetettujen optioiden preemio verotetaan asetusvuonna (EVL 27 d § 1 mom.) ja vähennetään
+  sulkemisvuonna. Käsittelyperusteet: `docs/PAATOSREKISTERI.md`.
 - **Päätösrekisteri** ([docs/PAATOSREKISTERI.md](docs/PAATOSREKISTERI.md)): käsittelysäännöt, niiden lähteet ja tila
   yhdessä tiedostossa. Ei muuta laskentaa.
 

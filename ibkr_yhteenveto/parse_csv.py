@@ -347,7 +347,10 @@ def _option_trades(trades: list[tuple[str, dict]], base: str, info: dict) -> lis
         und, right, mult = _option_meta(sym, info)
         cash = abs(to_num(d.get("Proceeds")) + to_num(d.get("Comm/Fee")))   # paid incl. / received net of commission
         rate = 1.0 if ccy == base else ratio.get((cls, ccy))
+        basis = abs(to_num(d.get("Basis")))     # closing rows: the opening trade's basis (premium of a written option)
         out.append({"date": (d.get("Date/Time") or "")[:10], "symbol": sym, "underlying": und, "right": right,
                     "mult": mult, "qty": q, "ccy": ccy, "code": d.get("Code", ""),
-                    "eur": cash * abs(rate) if rate is not None else None})
+                    "expiry": ((info.get(sym) or {}).get("Expiry") or "").strip()[:10],
+                    "eur": cash * abs(rate) if rate is not None else None,
+                    "basis_eur": basis * abs(rate) if (rate is not None and basis) else None})
     return out

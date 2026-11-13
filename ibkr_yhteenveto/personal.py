@@ -134,6 +134,8 @@ class PBooks:
     blocked: list[str] = field(default_factory=list)         # symbols whose FIFO stopped at an unknown corporate action
     der_exch: dict[str, str] = field(default_factory=dict)  # derivative symbol -> listing exchange ('' unknown)
     nondeductible: set = field(default_factory=set)          # derivative symbols off regulated markets
+    written: dict = field(default_factory=dict)              # written option lots {"closed": [...], "open": [...]}
+    wopt_rows: list[dict] = field(default_factory=list)      # written-option adjustments to IBKR's realized results
     end_lots: list[dict] = field(default_factory=list)   # open lots at period end (export for next year)
     preliminary: bool = False                             # some year-start lot has no user decision
 
@@ -202,14 +204,20 @@ def _ibkr_premium(st: Statement, ev: dict, leg: dict | None) -> float | None:
     return None
 
 
-def option_events(st: Statement, warnings: list[str], choices: dict | None = None) -> tuple[list[dict], list[dict]]:
+def option_events(st: Statement, warnings: list[str], choices: dict | None = None,
+                  written: dict | None = None) -> tuple[list[dict], list[dict]]:
     """FIFO over option contracts; returns (exercise/assignment events, stock legs with the premium applied).
 
-    Exercised long call: premium paid is added to the cost of the shares received (KHO 2012:69).
-    Exercised long put: premium paid is deducted from the sale price of the shares delivered.
-    Assignment of a written option: no adjustment here (premium taxed when written — see 62N-87)."""
+    Bought option exercised (OPT-H3): premium paid → cost of shares received (call) / off the sale price (put).
+    Written option assigned in the year it was written (OPT-H4): premium received → sale price of shares delivered
+    (call) / off the cost of shares received (put). Written in an earlier year (OPT-H5, option A): no adjustment.
+    `written` (optional dict) receives {"closed": [...], "open": [...]} records of written (short) option lots."""
     choices = choices or {}
     legs = [dict(x) for x in st.stock_legs]
+    start = st.period_start or ""
+    if written is not None:
+        written.setdefault("closed", [])
+        written.setdefault("open", [])
     if not st.option_trades:
         return [], legs
     end_qty = defaultdict(float)
@@ -229,7 +237,7 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
         for d, _, t in ts:
             q, cs = t["qty"], codes(t["code"])
             px = (t["eur"] / abs(q)) if (q and t["eur"] is not None) else None
-            used = []
+            used, q0, closing_short = [], abs(q), q > 0 and lots and lots[0][0] < 0
             while abs(q) > 1e-9 and lots and (lots[0][0] > 0) != (q > 0):
                 lot = lots[0]
                 n = min(abs(q), abs(lot[0]))
@@ -240,21 +248,39 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
                     lots.popleft()
             if abs(q) > 1e-9:
                 lots.append([q, px, d, "fifo"])
+            if used and closing_short and written is not None:   # written option bought back / expired / assigned
+                for n, e, m, od in used:
+                    same_year = m == "fifo" and od >= start
+                    prem = n * e if (e is not None and m not in ("unresolved", "ibkr")) else (
+                        t["basis_eur"] * n / q0 if t.get("basis_eur") else None)
+                    written["closed"].append({
+                        "symbol": sym, "opened": od, "closed": d, "contracts": n, "premium_eur": prem,
+                        "cost_eur": (px or 0.0) * n, "how": "A" if "A" in cs else ("Ep" if "Ep" in cs else "C"),
+                        "same_year": same_year, "expiry": t.get("expiry", "")})
             if used and ("Ex" in cs or "A" in cs):
                 n_tot = sum(u[0] for u in used)
-                known = [(n, e) for n, e, m, _ in used if e is not None and m not in ("unresolved", "ibkr")]
+                if "A" in cs:   # written option: only lots written in this period move their premium into shares
+                    known = [(n, e) for n, e, m, od in used if e is not None and m == "fifo" and od >= start]
+                else:
+                    known = [(n, e) for n, e, m, _ in used if e is not None and m not in ("unresolved", "ibkr")]
                 events.append({"date": d, "symbol": sym, "underlying": t["underlying"], "right": t["right"],
                                "mult": t["mult"], "contracts": n_tot, "kind": "exercise" if "Ex" in cs else "assignment",
                                "premium_eur": sum(n * e for n, e in known),
                                "unknown_contracts": n_tot - sum(n for n, _ in known),
                                "methods": sorted({m for _, _, m, _ in used}),
                                "bought": min(u[3] for u in used)})
+        if written is not None:
+            for lot in lots:
+                if lot[0] < 0:
+                    written["open"].append({"symbol": sym, "opened": lot[2], "contracts": -lot[0],
+                                            "premium_eur": (-lot[0]) * lot[1] if lot[1] is not None else None,
+                                            "same_year": lot[3] == "fifo" and lot[2] >= start,
+                                            "expiry": next((x["expiry"] for x in st.option_trades
+                                                            if x["symbol"] == sym and x.get("expiry")), "")})
     used_legs = set()
     for ev in events:
-        if ev["kind"] != "exercise":
-            warnings.append(f"{ev['symbol']}: toteutusvelvoite {ev['date']} (asetettu optio) — osakkeiden hintaa ei "
-                            "oikaista preemiolla; asetetun option preemio verotetaan asetusvuonna (ks. muistio).")
-            ev["target"] = "Toteutusvelvoite — ei oikaistu"
+        if ev["kind"] == "assignment":
+            _assign(ev, legs, used_legs, warnings)
             continue
         if ev["right"] not in ("C", "P"):
             warnings.append(f"{ev['symbol']}: option tyyppiä (C/P) ei tunnistettu — preemiota ei kohdistettu.")
@@ -289,6 +315,37 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
         leg["opt_prem"] = leg.get("opt_prem", 0.0) + prem
         leg["option"] = ev["symbol"]
     return events, legs
+
+
+def _assign(ev: dict, legs: list[dict], used_legs: set, warnings: list[str]) -> None:
+    """OPT-H4 / OPT-H5 (option A) for an assigned written option."""
+    prem, prior = ev["premium_eur"], ev["unknown_contracts"]
+    if prior > 1e-9:
+        warnings.append(f"{ev['symbol']}: toteutusvelvoite {ev['date']} — {_fi(prior, 0)} sopimusta asetettu aiempana "
+                        "vuonna; preemio on verotettu asetusvuonna, eikä osakkeiden hintaa oikaista (OPT-H5).")
+    if prem <= 1e-9 or ev["right"] not in ("C", "P"):
+        ev["target"] = "Toteutusvelvoite — asetettu aiempana vuonna, ei oikaistu (OPT-H5)" if prior > 1e-9 \
+            else "Toteutusvelvoite — preemio tuntematon, ei oikaistu"
+        return
+    n_same = ev["contracts"] - prior
+    want = n_same * ev["mult"] * (-1 if ev["right"] == "C" else 1)      # call: shares delivered; put: received
+    leg = next((x for i, x in enumerate(legs) if i not in used_legs and x["symbol"] == ev["underlying"]
+                and x["date"] == ev["date"] and (x["qty"] > 0) == (want > 0)
+                and abs(abs(x["qty"]) - abs(ev["contracts"] * ev["mult"])) < 1e-6), None)
+    if leg is None:
+        warnings.append(f"{ev['symbol']}: toteutusvelvoitteelle {ev['date']} ei löytynyt osakekauppaa — preemiota ei "
+                        "kohdistettu.")
+        ev["target"] = "Ei kohdistettu"
+        return
+    used_legs.add(legs.index(leg))
+    if ev["right"] == "C":       # premium received is part of the sale price of the shares delivered
+        leg["eur"] += prem
+        ev["target"] = "Lisätty toimitettujen osakkeiden luovutushintaan (OPT-H4)"
+    else:                        # premium received lowers the acquisition cost of the shares received
+        leg.setdefault("eur_orig", leg["eur"])
+        leg["eur"] = max(leg["eur"] - prem, 0.0)
+        ev["target"] = "Vähennetty saatujen osakkeiden hankintamenosta (OPT-H4)"
+    leg["option"] = ev["symbol"]
 
 
 _CA_RATIO = re.compile(r"(\d+(?:\.\d+)?)\s+for\s+(\d+(?:\.\d+)?)", re.I)
@@ -616,7 +673,7 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
                           "käytä PDF-raporttia (Forex P/L Details).")
 
     b.ru_by_symbol = {r.symbol: r.realized for r in st.ru if r.asset_class == "Stocks"}
-    b.option_events, legs = option_events(st, b.warnings, s.opening_choices)
+    b.option_events, legs = option_events(st, b.warnings, s.opening_choices, b.written)
     b.matches, b.end_lots = fifo_full(st, b.warnings, s.opening_choices, legs, b.ca_events, b.blocked)
     backout = _ibkr_backout(b.matches, b.ru_by_symbol)
     apply_presumption(b.matches, s.use_presumption)
@@ -665,6 +722,7 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     v["der_gains"] = sum(r.profit for r in b.derivatives)
     v["der_losses"] = sum(r.loss for r in b.derivatives if r.symbol not in b.nondeductible)
     v["der_losses_nondeductible"] = sum(r.loss for r in nondeductible)
+    _written_options(b)
     if nondeductible and v["der_losses_nondeductible"]:
         b.warnings.append("Johdannaisia muulla kuin säännellyllä markkinalla (" + ", ".join(sorted(
             {f"{r.symbol} @ {b.der_exch[r.symbol]}" for r in nondeductible})) + "): tappiot "
@@ -768,6 +826,64 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
                              f"{_fi(v['sec_net'])} € (IBKR:n kursseilla {_fi(alt_sec)} €, ero {_fi(v['sec_net'] - alt_sec)} €); "
                              f"pääomatulo {_fi(v['capital_income'])} € (IBKR:n kursseilla {_fi(alt_ci)} €).")
     return b
+
+
+def _written_options(b: PBooks) -> None:
+    """Written (sold) options on top of IBKR's realized results (Vero 48914 §2.4; decisions in docs/PAATOSREKISTERI.md).
+
+    IBKR realizes a written option's result when it is closed: premium − buyback (or the whole premium on expiry).
+    OPT-H1: premium of an option written this year and still open at year-end is taxable this year → added.
+    OPT-H6: option written in an earlier year and bought back / expired now: its premium was taxed when written →
+            removed from this year (the buyback cost remains a loss; for non-regulated markets only the gain is removed).
+    OPT-H7/H8: written and closed in the same year: hankintameno-olettama 20 % of the premium (no buyback cost) when
+            it gives the lower gain. Assignments: handled in the shares (OPT-H4) or not at all (OPT-H5)."""
+    v, s, W = b.v, b.s, b.written
+    ru = defaultdict(float)
+    for r in b.derivatives:
+        ru[r.symbol] += r.realized
+    open_p = prior = prior_nd = benefit = 0.0
+    unknown = set()
+    for o in W.get("open", []):
+        if not o["same_year"]:
+            continue
+        if o["premium_eur"] is None:
+            unknown.add(o["symbol"])
+            continue
+        open_p += o["premium_eur"]
+        b.wopt_rows.append({"rule": "OPT-H1", "symbol": o["symbol"], "date": o["opened"], "contracts": o["contracts"],
+                            "amount": o["premium_eur"], "label": "Asetettu, avoin vuoden lopussa: preemio verotetaan nyt"})
+    for c in W.get("closed", []):
+        if c["how"] == "A":
+            continue
+        if c["premium_eur"] is None:
+            unknown.add(c["symbol"])
+            continue
+        if not c["same_year"]:
+            adj = c["premium_eur"]
+            if c["symbol"] in b.nondeductible:        # loss not deductible: only remove a gain
+                adj = min(adj, max(0.0, ru[c["symbol"]]))
+            ru[c["symbol"]] -= adj
+            prior += adj
+            if c["symbol"] in b.nondeductible:
+                prior_nd += adj
+            b.wopt_rows.append({"rule": "OPT-H6", "symbol": c["symbol"], "date": c["closed"], "contracts": c["contracts"],
+                                "amount": -adj, "label": "Asetettu aiempana vuonna: jo verotettu preemio vähennetään"})
+        elif s.use_presumption:
+            gain, olettama = c["premium_eur"] - c["cost_eur"], 0.8 * c["premium_eur"]
+            if gain > olettama + 1e-9:
+                benefit += gain - olettama
+                b.wopt_rows.append({"rule": "OPT-H7", "symbol": c["symbol"], "date": c["closed"],
+                                    "contracts": c["contracts"], "amount": -(gain - olettama),
+                                    "label": "Hankintameno-olettama 20 % preemiosta (takaisinostokulua ei vähennetä)"})
+    if unknown:
+        b.warnings.append("Asetettujen optioiden preemio tuntematon (" + ", ".join(sorted(unknown)) + ") — ei oikaistu. "
+                          "Lisää Activity Statement CSV.")
+    if prior:
+        b.warnings.append(f"Aiempana vuonna asetettujen optioiden preemiot {_fi(prior)} € on vähennetty tämän vuoden "
+                          "tuloksesta, koska ne verotetaan asetusvuonna (OPT-H6). Tarkista, että ne on ilmoitettu silloin.")
+    v["wopt_open_premium"], v["wopt_prior_premium"], v["wopt_presumption"] = open_p, prior, benefit
+    v["der_gains"] += open_p - benefit - prior_nd     # non-regulated: the gain is removed, no deductible loss arises
+    v["der_losses"] -= prior - prior_nd
 
 
 def _cfd(b: PBooks) -> None:

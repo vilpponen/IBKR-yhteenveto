@@ -50,14 +50,14 @@ Koodi: `ibkr_yhteenveto/personal.py` (`option_events`, `fifo_full`). Tehtävät:
 
 | Tunnus | Päätös | Tila | Lähde |
 |---|---|---|---|
-| OPT-H1 | Asetetun option preemio on veronalaista sinä verovuonna, jona se on nostettavissa (asetusvuosi). | Vahvistettu | Vero 48914 §2.4 |
-| OPT-H2 | Position sulkeminen: tulos = saatu preemio − maksettu preemio, luovutusvoittosäännöin. | Vahvistettu | Vero 48914 §2.4 |
+| OPT-H1 | Asetetun option preemio on veronalaista sinä verovuonna, jona se on nostettavissa (asetusvuosi). | Voimassa (62N-87) | Vero 48914 §2.4 |
+| OPT-H2 | Position sulkeminen: tulos = saatu preemio − maksettu preemio, luovutusvoittosäännöin. | Voimassa (IBKR:n realisoitu tulos; 62N-87) | Vero 48914 §2.4 |
 | OPT-H3 | Ostettu optio toteutetaan lunastamalla osakkeet: maksettu preemio kuluineen on osa osakkeiden hankintamenoa (osto-optio) tai vähennetään luovutushinnasta (myyntioptio). | Voimassa (62N-86) | KHO 2012:69; Vero 48914 §2.4 |
-| OPT-H4 | Asetettu optio toteutetaan **samana vuonna**: preemio osaksi osakkeiden hankintahintaa tai luovutushintaa (osto-optio: lisätään toimitettujen osakkeiden luovutushintaan; myyntioptio: vähennetään saatujen osakkeiden hankintamenosta). Korvaa HEN-12:n. | Vahvistettu (päätetty 13.11.2026; toteutus 62N-87) | Vero 48914 §2.4 ("saatu tai maksettu preemio"); tulkinta |
-| OPT-H5 | Asetettu vuonna N, toteutettu vuonna N+1: preemio verotetaan vuonna N eikä osakkeiden hintaa oikaista myöhemmin; käyttäjän asetus ja muistiomerkintä. | Vahvistettu (päätetty 13.11.2026, vaihtoehto A; toteutus 62N-87) | Ei lähdettä; ohje ei sovita sääntöjä yhteen |
-| OPT-H6 | Asetettu vuonna N, takaisinostettu vuonna N+1: takaisinostokulu on luovutustappiota vuonna N+1 (säännelty markkina). | Vahvistettu (päätetty 13.11.2026; toteutus 62N-87) | TVL 50 § 3 mom. 1 k. ("siitä aiheutunut tappio"); tulkinta |
-| OPT-H7 | Hankintameno-olettama 20 % on sallittu asetetun option preemioon. | Vahvistettu (62N-87 D4) | KHO 9.9.1999 T 2410 (Vero 48914 §2.4:n kautta) |
-| OPT-H8 | Olettama korvaa todelliset menot: jos sitä käytetään preemioon, takaisinostokulua ei vähennetä erikseen. Olettama vain samana vuonna rauenneille tai suljetuille optioille. | Vahvistettu (päätetty 13.11.2026; toteutus 62N-87) | TVL 46 § 1 mom.; tulkinta |
+| OPT-H4 | Asetettu optio toteutetaan **samana vuonna**: preemio osaksi osakkeiden hankintahintaa tai luovutushintaa (osto-optio: lisätään toimitettujen osakkeiden luovutushintaan; myyntioptio: vähennetään saatujen osakkeiden hankintamenosta). Korvaa HEN-12:n. | Voimassa (62N-87; korvasi HEN-12:n 13.11.2026) | Vero 48914 §2.4 ("saatu tai maksettu preemio"); tulkinta |
+| OPT-H5 | Asetettu vuonna N, toteutettu vuonna N+1: preemio verotetaan vuonna N eikä osakkeiden hintaa oikaista myöhemmin; käyttäjän asetus ja muistiomerkintä. | Voimassa (62N-87, vaihtoehto A) | Ei lähdettä; ohje ei sovita sääntöjä yhteen |
+| OPT-H6 | Asetettu vuonna N, takaisinostettu vuonna N+1: takaisinostokulu on luovutustappiota vuonna N+1 (säännelty markkina). | Voimassa (62N-87) | TVL 50 § 3 mom. 1 k. ("siitä aiheutunut tappio"); tulkinta |
+| OPT-H7 | Hankintameno-olettama 20 % on sallittu asetetun option preemioon. | Voimassa (62N-87) | KHO 9.9.1999 T 2410 (Vero 48914 §2.4:n kautta) |
+| OPT-H8 | Olettama korvaa todelliset menot: jos sitä käytetään preemioon, takaisinostokulua ei vähennetä erikseen. Olettama vain samana vuonna rauenneille tai suljetuille optioille. | Voimassa (62N-87) | TVL 46 § 1 mom.; tulkinta |
 | OPT-H9 | Rauennut ostettu optio on luovutustappiota, jos optiolla käydään kauppaa säännellyllä tai siihen rinnastuvalla markkinalla. | Vahvistettu | TVL 50 § 3 mom. 1 k.; Vero 48914 §2.5 |
 | OPT-H10 | Indeksioptio (nettoarvon tilitys): tilitys on luovutushinta ja maksettu preemio hankintameno; tulo kuuluu tilitysvuodelle. | Vahvistettu | Vero 48914 §2.4 |
 | OPT-H11 | Säännellyt markkinat: ETA:n säännellyt markkinat ja Yhdysvaltain valvotut pörssit oletuksena; käyttäjä voi täydentää listaa. Muiden markkinapaikkojen johdannaistappiot ovat vähennyskelvottomia, voitot verotetaan. EMIR-vastaavuusluettelon kolmansien maiden markkinat jätetty toistaiseksi pois (päätetty 13.11.2026). | Voimassa (62N-91; `REGULATED_EXCHANGES`) | KVL 1/2021; EU 2022/552; Vero 48914 §1, §2.5 ja §7 |
@@ -71,10 +71,10 @@ Koodi: `ibkr_yhteenveto/books.py`. Tehtävä: 62N-87 (kesken).
 | Tunnus | Päätös | Tila | Lähde |
 |---|---|---|---|
 | OPT-Y1 | Säännellyllä tai muulla viranomaisen valvomalla markkinalla, voimassaolo enintään 18 kk: asettajan preemio on sen vuoden tuottoa, jona optio suljetaan, toteutetaan tai raukeaa. | Vahvistettu | EVL 27 d § 2 mom.; Vero 48083 §4 |
-| OPT-Y2 | OTC tai yli 18 kk: asettajan preemio on asetusvuoden tuloa. Lisäys verolaskelmaan asetusvuonna ja vähennys päättymisvuonna; osakkeiden hankintamenoa ei oikaista. | Vahvistettu | EVL 27 d § 1 mom.; Vero 48083 §3.2 ja liite 1 |
+| OPT-Y2 | OTC tai yli 18 kk: asettajan preemio on asetusvuoden tuloa. Lisäys verolaskelmaan asetusvuonna ja vähennys päättymisvuonna; osakkeiden hankintamenoa ei oikaista. | Voimassa (62N-87; EVL-lisäys automaattisesti, vähennys sulkemisvuonna syötteellä) | EVL 27 d § 1 mom.; Vero 48083 §3.2 ja liite 1 |
 | OPT-Y3 | Maksettu preemio vähennetään, kun optio suljetaan, toteutetaan tai raukeaa (kaikissa tapauksissa). | Vahvistettu | EVL 27 d § 3 mom. |
 | OPT-Y4 | Toteutus hankkimalla kohde-etuus: asetetun myyntioption preemio pienentää ja ostetun osto-option preemio kasvattaa osakkeiden hankintamenoa. | Vahvistettu | EVL 27 d § 2 ja 3 mom.; Vero 48083 §4.4 ja liite 2 |
-| OPT-Y5 | 18 kuukautta lasketaan asettamispäivästä toteutuspäivään, positiokohtaisesti. | Vahvistettu | HE 84/2002; Vero 48083 §4.2.2 |
+| OPT-Y5 | 18 kuukautta lasketaan asettamispäivästä toteutuspäivään, positiokohtaisesti. | Voimassa (62N-87; avoimelle positiolle asettamispäivästä erääntymispäivään) | HE 84/2002; Vero 48083 §4.2.2 |
 | OPT-Y6 | Markkinatesti on laajempi kuin henkilöillä: Yhdysvaltain pörssit kelpaavat suoraan lain sanamuodon nojalla. | Vahvistettu | EVL 27 d § 2 mom. |
 | OPT-Y7 | Pörssioptiot enintään 18 kk: verotus seuraa kirjanpitoa, eikä EVL-oikaisua tarvita, kun preemio on siirtovelkana option päättymiseen asti. | Vahvistettu | Vero 48083 §4.3 |
 | OPT-Y8 | Avoimen asetetun option tilinpäätöshetken tappio (KPL 5:2 -arvostus tai pakollinen varaus) ei ole vähennyskelpoinen ennen kuin optio suljetaan, toteutetaan tai raukeaa; se lisätään takaisin EVL-täsmäytyksessä. Poikkeus: käypään arvoon arvostettu kaupankäyntitarkoituksessa pidettävä rahoitusväline (KPL 5:2a) → EVL 27 e § ja 8 § 1 mom. 2 a k. (ei mikroyritykselle). | Ehdotus (vahvistus kirjanpitäjältä, 62N-95) | EVL 27 d § 2 ja 4 mom., 27 e §; HE 84/2002 s. 2–3 ja 8 (realisoitumaton menetys vähennyskelpoinen vain erityissäännöksellä; julkaisematon hallinto-oikeuden päätös 2000: avoimien asetettujen optioiden laskennalliset sulkemiskustannukset eivät vähennyskelpoisia, KHO ei myöntänyt valituslupaa 2001); Vero 48083 §4.3 ja liite 2; Lomake 77. KHO:n vuosikirjaratkaisua ei löytynyt vuoden 2002 jälkeen; KKO ei ratkaise veroasioita. |
@@ -114,10 +114,12 @@ rekisteriä perustettaessa, ellei rivillä toisin mainita.
 | HEN-9 | Kryptovarat: FIFO kolikoittain, hankintameno-olettama kuten osakkeilla, oma kohta OmaVero-kentissä. | Voimassa (62N-92) |
 | HEN-10 | Valuuttakurssi: oletuksena IBKR:n kauppakohtaiset EUR-määrät. Valinnainen EKP-tila käyttää selvityspäivän viitekurssia käyttäjän lisäämästä kurssitiedostosta; ei verkkoyhteyksiä. | Voimassa (62N-94) |
 | HEN-11 | OmaVero-kentissä luovutushinnat ovat bruttomyyntihintoja ja myyntiprovisiot kuluissa. | Voimassa (62N-89) |
-| HEN-12 | Asetetun option toteutusvelvoite (koodi A): osakkeiden hintaa ei oikaista preemiolla, ja laskelma varoittaa. | Voimassa (62N-86) — korvataan OPT-H4:llä 62N-87:n toteutuksessa |
+| HEN-12 | Asetetun option toteutusvelvoite (koodi A): osakkeiden hintaa ei oikaista preemiolla, ja laskelma varoittaa. | Korvattu 13.11.2026 → OPT-H4 (samana vuonna asetettu) ja OPT-H5 (aiempana vuonna asetettu) |
 
 ## Muutosloki
 
+- 13.11.2026 — 62N-87 toteutettu (dev): `OPT-H1`, `OPT-H2`, `OPT-H4`…`OPT-H8`, `OPT-Y2` ja `OPT-Y5` → Voimassa;
+  `HEN-12` korvattu (`OPT-H4`, `OPT-H5`).
 - 13.11.2026 — Omistajan päätökset 62N-87:ään: `OPT-H4`, `OPT-H5` (vaihtoehto A), `OPT-H6`, `OPT-H8` ja `OPT-H13`
   → Vahvistettu; `OPT-H11` pysyy ETA + Yhdysvallat. `OPT-Y8` Avoin → Ehdotus oikeuslähdeselvityksen perusteella
   (HE 84/2002, EVL 27 d–27 e §, Lomake 77). Lisätty `HEN-12` (nykyinen toteutusvelvoitteen käsittely) ja lähteitä.

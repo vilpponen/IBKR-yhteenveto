@@ -26,8 +26,8 @@ palvelimella muiden käyttöön; silloin sivu kertoo käyttäjälle, että rapor
 
 > ℹ️ **Kenelle työkalu sopii nyt.** Työkalu on tällä hetkellä tehty ensisijaisesti **aktiiviselle kaupankävijälle,
 > jonka salkku on vuoden alussa tyhjä** (positiot avataan ja suljetaan saman vuoden aikana). Aiempina vuosina
-> ostetuille erille sovellus kysyy käsittelytavan ([Vuoden alun positiot](#vuoden-alun-positiot)). Asetetut optiot
-> (toteutusvelvoite, vuodenvaihde) ja harvinaisemmat yritystapahtumat (esim. spinoffit, yritysostot) ovat vielä rajallisesti tuettuja —
+> ostetuille erille sovellus kysyy käsittelytavan ([Vuoden alun positiot](#vuoden-alun-positiot)). Harvinaisemmat
+> yritystapahtumat (esim. spinoffit, yritysostot) ovat vielä rajallisesti tuettuja —
 > laskelma varoittaa niistä. Työkalua kehitetään palautteen perusteella
 > ([Palaute](#palaute)).
 
@@ -181,6 +181,8 @@ kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä rapor
   hankintameno ostopäivän kurssilla (Verohallinnon tapa). Luovutushinnat, hankintamenot, voitot ja tappiot.
 * **Johdannaiset** (futuurit, optiot): voitot ja tappiot. Tappiot vähennetään vain säännellyiltä tai niihin
   rinnastettavilta markkinoilta (oletuksena ETA:n ja Yhdysvaltain pörssit; markkinapaikka CSV:stä).
+* **Asetetut optiot:** preemio verotetaan asetusvuonna; vuodenvaihteen yli menevät positiot ja toteutusvelvoitteet
+  käsitellään [päätösrekisterin](docs/PAATOSREKISTERI.md) mukaan.
 * **Optioiden toteutus:** ostetun osto-option preemio lisätään saatujen osakkeiden hankintamenoon ja ostetun
   myyntioption preemio vähennetään osakkeiden luovutushinnasta (KHO 2012:69). Tarvitsee Activity Statement CSV:n.
 * **CFD:t:** voitot kauppakohtaisesti muuna pääomatulona; tappiot eivät ole vähennyskelpoisia, joten niitä ei
@@ -264,4 +266,4 @@ Rakenne: `ibkr_yhteenveto/` (parserit, laskenta, Excel), `server.py` (paikalline
 Local tool that turns Interactive Brokers statements (PDF/CSV) into Finnish tax figures: bookkeeping (KPL) and
 the EVL tax bridge for a Finnish limited company, or OmaVero capital-income figures for an individual (FIFO at
 trade-date EUR rates). Runs on `127.0.0.1` with Python's standard-library HTTP server; nothing leaves your machine.
-Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Versioning: MINOR bumps whenever calculated figures can change, PATCH never changes figures. Currently aimed mainly at active traders who start the year with an empty portfolio (earlier-year lots are handled by asking the user per lot or by reading previous years' statements; exercised bought options adjust the shares' cost or sale price; splits and stock dividends are applied; crypto is FIFO per coin; written options and rarer corporate actions are only partly supported yet); it will be improved based on feedback. Not tax advice. MIT licence.
+Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Versioning: MINOR bumps whenever calculated figures can change, PATCH never changes figures. Currently aimed mainly at active traders who start the year with an empty portfolio (earlier-year lots are handled by asking the user per lot or by reading previous years' statements; exercised bought options adjust the shares' cost or sale price; splits and stock dividends are applied; crypto is FIFO per coin; written options follow the decision register (docs/PAATOSREKISTERI.md); rarer corporate actions are only partly supported yet); it will be improved based on feedback. Not tax advice. MIT licence.

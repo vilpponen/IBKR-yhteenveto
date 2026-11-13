@@ -144,6 +144,9 @@ def write_workbook(b: Books) -> bytes:
         "Edellisvuoden lopun realisoitumattomat voitot, joita ei kirjattu (KPL 5:6).", "ug_open")
     inp("Aiempien vuosien käyttämättömät osaketappiot (EVL 8 a §) (€)", s.evl8a_carryforward,
         "Vahvistetut muun omaisuuden luovutustappiot, 5 vuotta.", "cf")
+    inp("Aiemmin verotetut asetettujen optioiden preemiot (€)", s.wopt_premium_carry,
+        "OPT-Y2: OTC- tai yli 18 kk:n asetetut optiot, jotka suljettiin, toteutettiin tai raukesivat tällä tilikaudella "
+        "ja joiden preemio verotettiin asetusvuonna — vähennetään nyt.", "wopt_cf")
     inp("Hyvitetäänkö korkojen lähdevero Suomessa?", "Kyllä" if s.credit_interest_wht else "Ei",
         "Oletus Ei: FI–IE-sopimus → korko verotetaan vain Suomessa; Irlannin 20 % palautetaan (Form 8-3-6).",
         "intcredit", validation='"Kyllä,Ei"')
@@ -508,6 +511,9 @@ def write_workbook(b: Books) -> bytes:
          "Vain jos osakkeet = muu omaisuus. Rahoitusomaisuutena käsittely kirjanpitäjän kanssa.")
     erow("+ EVL 8 a §: vähennyskelvoton osaketappio", f'=IF({ref["cat"]}="muu omaisuus",MAX(0,-{ref["share_losses"]}-{ref["gains"]}),0)',
          "Osakkeiden luovutustappiot vähennetään vain muun omaisuuden luovutusvoitoista (vuosi + 5 v)")
+    erow("+ Asetettujen optioiden preemiot, OTC / yli 18 kk, avoinna (OPT-Y2)", round(b.v.get("evl_add_wopt", 0.0), 2),
+         "EVL 27 d § 1 mom.: preemio on asetusvuoden tuloa; kirjanpito tulouttaa sen vasta sulkemisessa", "in")
+    erow("− Aiemmin verotetut asetettujen optioiden preemiot (OPT-Y2)", f"=-{ref['wopt_cf']}", "Asetukset")
     erow("− Aiempien vuosien osaketappioiden käyttö", f'=IF({ref["cat"]}="muu omaisuus",-MIN({ref["cf"]},MAX(0,{ref["gains"]}+{ref["share_losses"]})),0)',
          "Asetukset")
     a1 = evl.r - 1

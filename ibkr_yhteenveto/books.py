@@ -56,6 +56,7 @@ class Settings:
     opening_writedowns: float = 0.0        # write-down provision at period start (from last year's file)
     opening_unbooked_gains: float = 0.0    # unrealized gains not booked at period start
     evl8a_carryforward: float = 0.0        # prior years' unused share losses (EVL 8 a §)
+    wopt_premium_carry: float = 0.0        # OPT-Y2: premiums taxed in earlier years for options closed this year (EUR)
     transaction_fees_override: float | None = None  # negative EUR, e.g. -2458.32
     tax_rate: float = 0.20
     credit_interest_wht: bool = False      # IE interest WHT: treaty 0 % -> reclaim from Ireland by default
@@ -261,8 +262,9 @@ def build(st: Statement, s: Settings) -> Books:
     else:
         v["evl8a_excess"] = 0.0
         v["evl8a_use_cf"] = 0.0
+    _written_options_y2(b, st, s)
     v["evl_adjust"] = (v["evl_add_wht"] + v["evl_add_wd_other"] + v["evl_add_wd_shares"]
-                       + v["evl8a_excess"] + v["evl8a_use_cf"])
+                       + v["evl8a_excess"] + v["evl8a_use_cf"] + v["evl_add_wopt"] + v["evl_ded_wopt"])
     v["taxable"] = v["book_result"] + v["evl_adjust"]
     v["tax_gross"] = max(v["taxable"], 0.0) * s.tax_rate
     # foreign tax credit: dividend WHT by country, capped at Finnish tax on that income
@@ -329,3 +331,36 @@ def build(st: Statement, s: Settings) -> Books:
     if abs(v["book_result"] - v["book_result_check"]) > 0.01 or abs(v["bs_equity"] - v["eq_close_calc"]) > 0.05:
         b.warnings.append("Internal tie-out failed (book result or balance sheet) — please report")
     return b
+
+
+def _written_options_y2(b, st: Statement, s: Settings) -> None:
+    """OPT-Y2 (EVL 27 d § 1 mom.): premium of a written option that is OTC (not on a regulated / supervised market) or
+    runs longer than 18 months (writing date → expiry, OPT-Y5) is income in the year it is written. The books (and
+    IBKR) recognise it only on closing, so for such options written this year and open at year-end the premium is
+    added in the EVL bridge; the closing year deducts it (user input `wopt_premium_carry`). Options up to 18 months on
+    regulated markets: taxation follows the books (OPT-Y1, OPT-Y7) — no adjustment."""
+    from datetime import date
+    from .personal import REGULATED_EXCHANGES, option_events
+    v = b.v
+    written: dict = {}
+    option_events(st, [], None, written)
+    rows = []
+    for o in written.get("open", []):
+        if not o["same_year"] or o["premium_eur"] is None:
+            continue
+        ex = st.listing_exch.get(o["symbol"], "")
+        otc = bool(ex) and ex.upper() not in REGULATED_EXCHANGES
+        long_ = False
+        try:
+            long_ = (date.fromisoformat(o["expiry"]) - date.fromisoformat(o["opened"])).days > 548
+        except (ValueError, TypeError):
+            pass
+        if otc or long_:
+            rows.append(dict(o, reason="OTC / ei säännelty markkina" if otc else "yli 18 kk"))
+    b.wopt_y2 = rows
+    v["evl_add_wopt"] = sum(r["premium_eur"] for r in rows)
+    v["evl_ded_wopt"] = -abs(s.wopt_premium_carry)
+    if rows:
+        b.warnings.append("Asetettuja optioita (OTC tai yli 18 kk) avoinna tilikauden lopussa: preemiot "
+                          f"{v['evl_add_wopt']:,.2f} € lisätty verotettavaan tuloon asetusvuonna (EVL 27 d § 1 mom.). "
+                          "Vähennä ne sulkemisvuonna (asetus 'Aiemmin verotetut asetettujen optioiden preemiot').")

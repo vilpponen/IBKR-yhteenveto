@@ -80,6 +80,8 @@ def company(st: Statement, s: Settings) -> tuple[dict, bytes]:
                 ["+ Arvonalentumiset futuurit/ETF", v["evl_add_wd_other"]],
                 ["+ Arvonalentumiset osakkeet", v["evl_add_wd_shares"]],
                 ["+ EVL 8 a § ylitys", v["evl8a_excess"]], ["− Tappioiden käyttö", v["evl8a_use_cf"]],
+                ["+ Asetettujen optioiden preemiot (OTC / yli 18 kk)", v["evl_add_wopt"]],
+                ["− Aiemmin verotetut asetettujen optioiden preemiot", v["evl_ded_wopt"]],
                 ["VEROTETTAVA TULO", v["taxable"]], ["Yhteisövero", v["tax_gross"]],
                 ["− Hyvitys", v["tax_credit"]], ["MAKSETTAVA", v["tax_net"]]], [1]),
             "Siirrot": _t(["Päivä", "Kuvaus", "Tyyppi", "EUR"],
@@ -151,7 +153,10 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
             "Johdannaiset": _t(["Luokka", "Symboli", "Voitot", "Tappiot", "Netto", "Markkinapaikka", "Tappio vähennyskelpoinen"],
                                [[r.asset_class, r.symbol, r.profit, r.loss, r.realized, pb.der_exch.get(r.symbol) or "tuntematon",
                                  "Ei (ei säännelty markkina)" if r.symbol in pb.nondeductible else "Kyllä"]
-                                for r in pb.derivatives], [2, 3, 4]),
+                                for r in pb.derivatives]
+                               + [[f"Asetettu optio ({w['rule']})", w["symbol"], w["amount"] if w["amount"] > 0 else 0.0,
+                                   w["amount"] if w["amount"] < 0 else 0.0, w["amount"], "", w["label"]]
+                                  for w in pb.wopt_rows], [2, 3, 4]),
             "CFD:t": _t(["Päivä", "Symboli", "Tulos", "Käsittely"],
                         [[x["date"], x["symbol"], x["eur"],
                           "Veronalainen (muu pääomatulo)" if x["eur"] > 0 else "Ei huomioida (vähennyskelvoton)"]

@@ -26,6 +26,8 @@ def main(argv=None) -> int:
     g.add_argument("--opening-writedowns", type=float, default=0.0)
     g.add_argument("--opening-unbooked-gains", type=float, default=0.0)
     g.add_argument("--evl8a-carryforward", type=float, default=0.0)
+    g.add_argument("--wopt-premium-carry", type=float, default=0.0,
+                   help="OPT-Y2: premiums of OTC/>18-month written options taxed in earlier years, closed this year")
     g.add_argument("--etf", default="", help="comma-separated symbols that are ETFs/funds (not shares)")
     p = ap.add_argument_group("personal mode")
     p.add_argument("--personal", action="store_true", help="individual: OmaVero capital income instead of company books")
@@ -45,6 +47,7 @@ def main(argv=None) -> int:
     s = Settings(company=a.company, share_category=a.share_category,
                  transaction_fees_override=a.ftt, opening_writedowns=a.opening_writedowns,
                  opening_unbooked_gains=a.opening_unbooked_gains, evl8a_carryforward=a.evl8a_carryforward,
+                 wopt_premium_carry=a.wopt_premium_carry,
                  etf_symbols={x.strip() for x in a.etf.split(",") if x.strip()})
     b = build(st, s)
     out = Path(a.out or f"{st.account}_{st.period_end[:4]}_tilinpaatos.xlsx")

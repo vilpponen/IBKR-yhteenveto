@@ -134,6 +134,8 @@
             <div class="field"><label for="wd_open">Avaavat arvonalentumiset 1.1. (EUR)</label><input id="wd_open" type="number" min="0" step="0.01" value="0"></div>
             <div class="field"><label for="ug_open">Avaavat kirjaamattomat arvonnousut 1.1. (EUR)</label><input id="ug_open" type="number" min="0" step="0.01" value="0"></div>
             <div class="field"><label for="cf">Käyttämättömät osaketappiot, EVL 8 a § (EUR)</label><input id="cf" type="number" min="0" step="0.01" value="0"></div>
+            <div class="field"><label for="wopt_cf">Aiemmin verotetut asetettujen optioiden preemiot (EUR)</label><input id="wopt_cf" type="number" min="0" step="0.01" value="0">
+              <div class="hint">OTC- tai yli 18 kk:n asetetut optiot, jotka päättyivät tällä tilikaudella ja joiden preemio verotettiin asetusvuonna.</div></div>
           </details>
           <details><summary>Lisäasetukset</summary>
             <div class="field"><label for="etfs">ETF/rahasto-symbolit (pilkuilla)</label><input id="etfs" type="text">
@@ -207,7 +209,7 @@ let files = [], recog = null, stmt = null, result = null;
 let choices = {}, choicesKey = "";
 
 // ---------- persist settings (convenience only; never statement data)
-const FIELDS = ["name","share_cat","ftt","wd_open","ug_open","cf","etfs","loss_cf","extra_regulated","fx_mode"];
+const FIELDS = ["name","share_cat","ftt","wd_open","ug_open","cf","wopt_cf","etfs","loss_cf","extra_regulated","fx_mode"];
 const CHECKS = ["int_credit_c","int_credit_p","include_fx","use_presumption"];
 function saveSettings(){ try{ const o={mode:mode()}; FIELDS.forEach(k=>o[k]=$("#"+k).value); CHECKS.forEach(k=>o[k]=$("#"+k).checked);
   localStorage.setItem("ibkr-yhteenveto", JSON.stringify(o)); }catch(e){} }
@@ -412,7 +414,7 @@ $("#ftt").addEventListener("input", renderRecog);
 function settings(){
   const m = mode(), o = {name: $("#name").value};
   if(m === "company") Object.assign(o, {share_cat: $("#share_cat").value, ftt: $("#ftt").value, wd_open: $("#wd_open").value,
-    ug_open: $("#ug_open").value, cf: $("#cf").value, etfs: $("#etfs").value, int_credit: $("#int_credit_c").checked});
+    ug_open: $("#ug_open").value, cf: $("#cf").value, wopt_cf: $("#wopt_cf").value, etfs: $("#etfs").value, int_credit: $("#int_credit_c").checked});
   else Object.assign(o, {loss_cf: $("#loss_cf").value, include_fx: $("#include_fx").checked, int_credit: $("#int_credit_p").checked,
     use_presumption: $("#use_presumption").checked, extra_regulated: $("#extra_regulated").value, fx_mode: $("#fx_mode").value,
     opening_choices: openingChoices()});
