@@ -4,7 +4,7 @@
 # Mitä skripti tekee:
 #   1. etsii Pythonin 3.10+ (py -3, python, python3)
 #   2. luo yksityisen virtuaaliympäristön .\.venv (mitään ei asenneta järjestelmään)
-#   3. asentaa requirements.txt:n (pdfplumber, openpyxl) - vain jos ei jo asennettu
+#   3. asentaa lukitun requirements.txt:n (pdfplumber, openpyxl; tiivisteet tarkistetaan) - vain jos ei jo asennettu
 #   4. käynnistää paikallisen palvelimen (server.py) -> http://127.0.0.1:8501, lopetus Ctrl+C
 # Lisäargumentit välitetään server.py:lle, esim. run.cmd --port 8600
 # Poisto: poista .venv-kansio.
@@ -49,8 +49,8 @@ $req = Join-Path $PSScriptRoot 'requirements.txt'
 if ((Test-Path -LiteralPath $marker) -and ((Get-FileHash $marker).Hash -eq (Get-FileHash $req).Hash)) {
     Write-Host 'Riippuvuudet jo asennettu - ohitetaan (poista .venv pakottaaksesi uudelleenasennuksen)'
 } else {
-    & $vpy -m pip install --upgrade pip
-    & $vpy -m pip install -r $req
+    # lukitut versiot ja SHA-256-tiivisteet: pip asentaa vain täsmälleen nämä paketit (62N-97)
+    & $vpy -m pip install --disable-pip-version-check --require-hashes -r $req
     if ($LASTEXITCODE -ne 0) { Fail 'Riippuvuuksien asennus epäonnistui (verkkoyhteys?). Aja uudelleen - asennus jatkuu.' }
     & $vpy -c "import pdfplumber, openpyxl; print('imports OK')"
     if ($LASTEXITCODE -ne 0) { Fail 'Riippuvuudet eivät lataudu.' }

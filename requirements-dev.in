@@ -1,0 +1,3 @@
+# Testit (CI ja kehitys). Lukitaan yhdessä requirements.in:n kanssa: bash scripts/lock_deps.sh
+-c requirements.txt
+pytest>=8
