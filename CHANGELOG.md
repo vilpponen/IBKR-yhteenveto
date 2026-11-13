@@ -30,6 +30,8 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
   kolikoittain, hankintameno-olettama kuten osakkeilla, oma kohta OmaVero-kentissä ja työkirjassa. 1 000 euron
   pienten luovutusten raja lasketaan arvopapereiden ja kryptovarojen luovutushinnoista yhteensä. Osakeyhtiössä
   kryptot ovat muuta omaisuutta (kuten aiemmin).
+- **Päätösrekisteri** ([docs/PAATOSREKISTERI.md](docs/PAATOSREKISTERI.md)): käsittelysäännöt, niiden lähteet ja tila
+  yhdessä tiedostossa. Ei muuta laskentaa.
 
 **Muutettu**
 - OmaVero-kentät: luovutushinnat ovat bruttomyyntihintoja ja myyntiprovisiot ovat kuluissa (aiemmin myyntiprovisio
