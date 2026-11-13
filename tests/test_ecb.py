@@ -1,4 +1,5 @@
 """62N-94: optional ECB reference rates (user-supplied eurofxref-hist.csv; no network, nothing stored)."""
+from decimal import Decimal
 import pytest
 
 from ibkr_yhteenveto import load
@@ -26,17 +27,17 @@ def test_ecb_mode_converts_at_settlement_rate_and_shows_difference():
     assert st.ecb_rates and set(next(iter(st.ecb_rates.values()))) == {"USD"}     # trimmed to what is needed
     ibkr = build_personal(st, PSettings(use_presumption=False))
     ecb = build_personal(st, PSettings(use_presumption=False, fx_mode="ecb"))
-    assert ibkr.v["sec_net"] == pytest.approx(88.2)               # IBKR: 0.9 EUR/USD on both legs
+    assert ibkr.v["sec_net"] == pytest.approx(Decimal("88.2"))               # IBKR: 0.9 EUR/USD on both legs
     # ECB: buy settles 5.3. (1001 USD / 1.25), sale settles 10.3. (1099 USD / 1.0)
     (m,) = ecb.matches
-    assert m.proceeds == pytest.approx(1100) and m.cost == pytest.approx(1001 / 1.25 + 1)
-    assert ecb.v["fx_alt_sec_net"] == pytest.approx(88.2)
+    assert m.proceeds == pytest.approx(1100) and m.cost == Decimal(1001) / Decimal("1.25") + 1
+    assert ecb.v["fx_alt_sec_net"] == pytest.approx(Decimal("88.2"))
     assert ecb.warnings[0].startswith("Valuuttakurssit: EKP:n viitekurssi")
 
 
 def test_ecb_mode_without_file_falls_back():
     pb = build_personal(load([("s.csv", USD)]), PSettings(fx_mode="ecb", use_presumption=False))
-    assert pb.v["sec_net"] == pytest.approx(88.2) and any("eurofxref-hist.csv" in w for w in pb.warnings)
+    assert pb.v["sec_net"] == pytest.approx(Decimal("88.2")) and any("eurofxref-hist.csv" in w for w in pb.warnings)
 
 
 def test_ecb_file_alone_is_rejected():

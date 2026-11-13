@@ -7,18 +7,34 @@ from .books import Y8_CHOICES, Books, Settings, build, classify_transfers, open_
 from .excel import write_workbook
 from .excel_personal import write_personal_workbook
 from .model import Statement
+from .num import ONE, TIE_TOL, ZERO, D, Decimal, money as _money
 from .personal import SOURCES, PBooks, PSettings, build_personal, omavero_fields, opening_lots
 
 
 
-def _fi(x: float, d: int = 2) -> str:
+def _fi(x: Decimal, d: int = 2) -> str:
     """Finnish number format: 1 234,56"""
-    x = 0.0 if abs(x) < 0.5 * 10 ** -d else x
+    x = ZERO if abs(x) < D("0.5") * D(10) ** -d else x
     return f"{x:,.{d}f}".replace(",", "\u00a0").replace(".", ",")
 
 def _t(columns, rows, money=None):
     """Table: money = indices of numeric EUR columns (formatted client-side)."""
     return {"columns": columns, "rows": rows, "money": money if money is not None else []}
+
+
+def _present(res: dict) -> dict:
+    """Output rounding (62N-97): euro amounts to cents, half even — only here, after all calculation is done.
+    Money columns of tables, metrics and OmaVero sections; quantities keep their digits."""
+    def table(t):
+        cols = set(t.get("money") or [])
+        t["rows"] = [[_money(x) if (i in cols and isinstance(x, (Decimal, int, float)) and not isinstance(x, bool))
+                      else x for i, x in enumerate(r)] for r in t["rows"]]
+    res["metrics"] = [[l, _money(x)] for l, x in res.get("metrics", [])]
+    for sec in res.get("sections", []):
+        table(sec["table"])
+    for t in res.get("tabs", {}).values():
+        table(t)
+    return res
 
 
 def recognised(st: Statement) -> dict:
@@ -36,7 +52,7 @@ def recognised(st: Statement) -> dict:
         "title": st.title, "name": st.name, "account": st.account, "customer_type": st.customer_type,
         "period_start": st.period_start, "period_end": st.period_end, "sources": st.source_files,
         "found": found, "nav_start": st.nav_start, "nav_end": st.nav_end,
-        "net_deposits": st.deposits_total_eur or 0.0, "stock_legs": len(st.stock_legs),
+        "net_deposits": st.deposits_total_eur or ZERO, "stock_legs": len(st.stock_legs),
         "is_corporate": any(k in (st.customer_type or "").lower() for k in ("corporate", "institution")),
         "history_periods": list(st.history_periods),
         # year-start positions consumed this period that need the user's decision (personal mode)
@@ -51,7 +67,7 @@ def recognised(st: Statement) -> dict:
 def company(st: Statement, s: Settings) -> tuple[dict, bytes]:
     b: Books = build(st, s)
     v = b.v
-    ok = abs(v["book_result"] - v["book_result_check"]) < 0.01 and abs(v["bs_equity"] - v["eq_close_calc"]) < 0.05
+    ok = abs(v["book_result"] - v["book_result_check"]) <= TIE_TOL and abs(v["bs_equity"] - v["eq_close_calc"]) <= TIE_TOL
     kinds = classify_transfers(st.deposits)
     res = {
         "mode": "company",
@@ -113,7 +129,7 @@ def company(st: Statement, s: Settings) -> tuple[dict, bytes]:
                             f"tappiot': {_fi(v['evl_add_wd_wopt'])} € (OPT-Y8, ehdotus — vahvista kirjanpitäjältä).")
     if not b.checks:
         res["notes"].append("Ei Change in NAV -osiota (Realized Summary). Activity Statement CSV antaa IBKR-tarkistukset.")
-    return res, write_workbook(b)
+    return _present(res), write_workbook(b)
 
 
 # ------------------------------------------------------------------ personal
@@ -123,7 +139,7 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
     groups: dict[str, list] = defaultdict(list)
     for sec, fld, val, note in omavero_fields(pb):
         groups[sec].append([fld, val, note])
-    agg = defaultdict(lambda: [0.0, 0.0, 0.0, 0.0])
+    agg = defaultdict(lambda: [ZERO, ZERO, ZERO, ZERO])
     for m in pb.matches:
         a = agg[m.symbol]
         a[0] += m.proceeds
@@ -151,9 +167,9 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
         "sections_caption": "Paljon kauppoja: ilmoita arvopaperikaupat yhteenvetona ja liitä ladattu Excel erittelyksi.",
         "tabs": {
             "Pääomatulolaskelma": _t(["Erä", "EUR"], [
-                ["Arvopapereiden voitot − tappiot (FIFO)", 0.0 if v["small_exempt"] else v["sec_net"]],
+                ["Arvopapereiden voitot − tappiot (FIFO)", ZERO if v["small_exempt"] else v["sec_net"]],
                 ["Johdannaisten voitot − tappiot", v["der_gains"] + v["der_losses"]],
-                ["Kryptovarat voitot − tappiot", 0.0 if v["small_exempt"] else v["crypto_gains"] + v["crypto_losses"]],
+                ["Kryptovarat voitot − tappiot", ZERO if v["small_exempt"] else v["crypto_gains"] + v["crypto_losses"]],
                 ["Valuutat", v["fx_gains"] + v["fx_losses"]],
                 ["Osingot × 85 %", v["div_taxable"]], ["Payment in lieu", v["pil_taxable"]],
                 ["Korkotulot", v["int_income"]], ["CFD-voitot (muu pääomatulo)", v["cfd_gains"]],
@@ -163,13 +179,13 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
                 ["− Ulkomaisen veron hyvitys", -v["tax_credit"]], ["VERO NETTO (arvio)", v["tax_net"]]], [1]),
             "Arvopaperit symboleittain": _t(
                 ["Symboli", "Luovutushinnat", "Hankintamenot", "Voitot", "Tappiot", "Netto (FIFO)", "IBKR R&U"],
-                [[k, *x, x[2] + x[3], pb.ru_by_symbol.get(k, 0.0)] for k, x in sorted(agg.items())], [1, 2, 3, 4, 5, 6]),
+                [[k, *x, x[2] + x[3], pb.ru_by_symbol.get(k, ZERO)] for k, x in sorted(agg.items())], [1, 2, 3, 4, 5, 6]),
             "Johdannaiset": _t(["Luokka", "Symboli", "Voitot", "Tappiot", "Netto", "Markkinapaikka", "Tappio vähennyskelpoinen"],
                                [[r.asset_class, r.symbol, r.profit, r.loss, r.realized, pb.der_exch.get(r.symbol) or "tuntematon",
                                  "Ei (ei säännelty markkina)" if r.symbol in pb.nondeductible else "Kyllä"]
                                 for r in pb.derivatives]
-                               + [[f"Asetettu optio ({w['rule']})", w["symbol"], w["amount"] if w["amount"] > 0 else 0.0,
-                                   w["amount"] if w["amount"] < 0 else 0.0, w["amount"], "", w["label"]]
+                               + [[f"Asetettu optio ({w['rule']})", w["symbol"], w["amount"] if w["amount"] > 0 else ZERO,
+                                   w["amount"] if w["amount"] < 0 else ZERO, w["amount"], "", w["label"]]
                                   for w in pb.wopt_rows], [2, 3, 4]),
             "CFD:t": _t(["Päivä", "Symboli", "Tulos", "Käsittely"],
                         [[x["date"], x["symbol"], x["eur"],
@@ -216,4 +232,4 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
              for e in pb.option_events], [4])
     # open lots at period end -> JSON the user can import next year as year-start choices
     res["end_lots"] = {"account": st.account, "as_of": st.period_end, "lots": pb.end_lots}
-    return res, write_personal_workbook(pb)
+    return _present(res), write_personal_workbook(pb)

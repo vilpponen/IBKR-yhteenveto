@@ -12,6 +12,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from .xlsx_mem import workbook_bytes
 
 from .books import Books, _is_div_wht, _is_pil, classify_transfers, wht_country
+from .num import Decimal
 from .parse_common import CFD_CLASSES
 
 Y8_LABELS = {"addback": "Asetettu optio: lisätään takaisin (OPT-Y8)",
@@ -82,12 +83,19 @@ class Sheet:
             c.font = (F_INPUT if k == "in" else F_LINK if k == "link" else F_BOLD if bold else F_BASE)
             if bold and k in ("link", "in"):
                 c.font = Font(name=FONT, size=10, bold=True, color=c.font.color)
-            if isinstance(val, (int, float)) or (isinstance(val, str) and val.startswith("=")):
+            if isinstance(val, (int, float, Decimal)) and not isinstance(val, bool) or (isinstance(val, str) and val.startswith("=")):
                 c.number_format = fmt[i - 1] if fmt and i - 1 < len(fmt) and fmt[i - 1] else NUM
             if total:
                 c.fill, c.border = FILL_TOT, TOP
         self.r += 1
         return r
+
+    def end(self, r0: int) -> int:
+        """Last data row of a block that started at r0. An empty block gets a placeholder row, so ranges like
+        E{r0}:E{r1} never point at the total row below them (that would be a circular reference)."""
+        if self.r == r0:
+            self.row(["(ei rivejä)"], ["t"])
+        return self.r - 1
 
     def note(self, text, col=1):
         c = self.ws.cell(self.r, col, text)
@@ -173,9 +181,9 @@ def write_workbook(b: Books) -> bytes:
                  "Peruttu": "Peruttu siirto — pari nettoutuu nollaan, ei kirjata"}.get(kind, "Tarkista: peruutukselle ei löytynyt paria")
         dw.row([x.date, x.description, x.currency, x.amount, x.amount_eur, kind, treat],
                ["in", "in", "in", "in", "in", "in", "t"])
-    r1 = dw.r - 1
-    rng = f"E{r0}:E{max(r1, r0)}"
-    krng = f"F{r0}:F{max(r1, r0)}"
+    r1 = dw.end(r0)
+    rng = f"E{r0}:E{r1}"
+    krng = f"F{r0}:F{r1}"
     dvk = DataValidation(type="list", formula1='"Talletus,Nosto,Peruttu"')
     dw.ws.add_data_validation(dvk)
     dvk.add(krng)
@@ -207,7 +215,7 @@ def write_workbook(b: Books) -> bytes:
                ["t", "t", "in", "in", "f", "in", "in", "f", "f", "in" if w else "t"])
         if w:
             y8_cells.append(f"J{r}")
-    r1 = max(rp.r - 1, r0)
+    r1 = rp.end(r0)
     if y8_cells:
         dvy = DataValidation(type="list", formula1='"' + ",".join(Y8_LABELS.values()) + '"', allow_blank=False)
         rp.ws.add_data_validation(dvy)
@@ -254,7 +262,7 @@ def write_workbook(b: Books) -> bytes:
     for x in st.interest:
         kk.row([x.date, x.description, x.currency, x.amount, x.amount_eur,
                 "Tuotto" if x.amount_eur > 0 else "Kulu"], ["in", "in", "in", "in", "in", "f"])
-    r1 = max(kk.r - 1, r0)
+    r1 = kk.end(r0)
     rt = kk.row(["Korkotuotot (9180)", None, None, None, f'=SUMIF(E{r0}:E{r1},">0")'], bold=True)
     ref["int_inc"] = kk.q(f"E{rt}")
     rt = kk.row(["Korkokulut (9442)", None, None, None, f'=SUMIF(E{r0}:E{r1},"<0")'], bold=True)
@@ -265,7 +273,7 @@ def write_workbook(b: Books) -> bytes:
     r0 = kk.r
     for x in st.fees:
         kk.row([x.date, x.description, x.currency, x.amount, x.amount_eur], ["in", "in", "in", "in", "in"])
-    r1 = max(kk.r - 1, r0)
+    r1 = kk.end(r0)
     rt = kk.row(["Muut rahoituskulut (9446)", None, None, None, f"=SUM(E{r0}:E{r1})" if st.fees else 0], bold=True, total=True)
     ref["fees"] = kk.q(f"E{rt}")
     kk.blank()
@@ -290,7 +298,7 @@ def write_workbook(b: Books) -> bytes:
         typ = "Osinko" if _is_div_wht(x.description) else "Korko"
         kk.row([x.date, x.description, x.currency, x.amount, x.amount_eur, typ, wht_country(x.description, x.currency)],
                ["in", "in", "in", "in", "in", "in", "in"])
-    r1 = max(kk.r - 1, r0)
+    r1 = kk.end(r0)
     rt = kk.row(["Lähdeverot osingoista (9981)", None, None, None, f'=SUMIF(F{r0}:F{r1},"Osinko",E{r0}:E{r1})'], bold=True)
     ref["wht_div"] = kk.q(f"E{rt}")
     rt = kk.row(["Lähdeverot koroista (9982)", None, None, None, f'=SUMIF(F{r0}:F{r1},"Korko",E{r0}:E{r1})'], bold=True)
@@ -312,7 +320,7 @@ def write_workbook(b: Books) -> bytes:
                  "Muu rahoitustuotto (SYEP-lainaus) — ei osinko, ei lähdeveroa" if pil else
                  "Osinko listatusta yhtiöstä, omistus < 10 % → 100 % veronalainen (EVL 6 a §)"],
                 ["in", "in", "in", "in", "in", "in", "t"])
-    r1 = max(os_.r - 1, r0)
+    r1 = os_.end(r0)
     rt = os_.row(["Osinkotuotot (9091)", None, None, None, f'=SUMIF(F{r0}:F{r1},"Osinko",E{r0}:E{r1})'], bold=True)
     ref["div"] = os_.q(f"E{rt}")
     rt = os_.row(["Payment in lieu (9092)", None, None, None, f'=SUMIF(F{r0}:F{r1},"PIL",E{r0}:E{r1})'], bold=True)
@@ -540,7 +548,7 @@ def write_workbook(b: Books) -> bytes:
     erow("− OPT-Y8: edellisellä tilikaudella lisätyt asetettujen optioiden tappiot", f"=-{ref['wopt_loss_cf']}", "Asetukset")
     erow("+ EVL 8 a §: vähennyskelvoton osaketappio", f'=IF({ref["cat"]}="muu omaisuus",MAX(0,-{ref["share_losses"]}-{ref["gains"]}),0)',
          "Osakkeiden luovutustappiot vähennetään vain muun omaisuuden luovutusvoitoista (vuosi + 5 v)")
-    erow("+ Asetettujen optioiden preemiot, OTC / yli 18 kk, avoinna (OPT-Y2)", round(b.v.get("evl_add_wopt", 0.0), 2),
+    erow("+ Asetettujen optioiden preemiot, OTC / yli 18 kk, avoinna (OPT-Y2)", b.v.get("evl_add_wopt", 0.0),
          "EVL 27 d § 1 mom.: preemio on asetusvuoden tuloa; kirjanpito tulouttaa sen vasta sulkemisessa", "in")
     erow("− Aiemmin verotetut asetettujen optioiden preemiot (OPT-Y2)", f"=-{ref['wopt_cf']}", "Asetukset")
     erow("− Aiempien vuosien osaketappioiden käyttö", f'=IF({ref["cat"]}="muu omaisuus",-MIN({ref["cf"]},MAX(0,{ref["gains"]}+{ref["share_losses"]})),0)',

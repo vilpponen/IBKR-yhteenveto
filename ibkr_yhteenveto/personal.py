@@ -18,12 +18,13 @@ from datetime import date
 
 from .books import _is_div_wht, _is_pil, _div_country, wht_country
 from .model import Statement
+from .num import ONE, ZERO, D, Decimal, check_date, dec, located, nonneg
 from .parse_common import CFD_CLASSES, CRYPTO_CLASSES, OPTION_CLASSES, codes
 
 
-def _fi(x: float, d: int = 2) -> str:
+def _fi(x: Decimal, d: int = 2) -> str:
     """Finnish number format: 1 234,56"""
-    x = 0.0 if abs(x) < 0.5 * 10 ** -d else x
+    x = ZERO if abs(x) < D("0.5") * D(10) ** -d else x
     return f"{x:,.{d}f}".replace(",", "\u00a0").replace(".", ",")
 
 # Regulated markets (or equivalent) for futures and standardised options: losses are deductible only there
@@ -48,14 +49,14 @@ def _is_cfd_cost(desc: str) -> bool:
 @dataclass
 class PSettings:
     name: str = ""
-    loss_carryforward: float = 0.0     # confirmed capital losses from previous years (vahvistetut luovutustappiot)
+    loss_carryforward: Decimal = ZERO     # confirmed capital losses from previous years (vahvistetut luovutustappiot)
     include_fx: bool = False           # IBKR R&U 'Forex' row as currency disposals (off: overlaps stock EUR P/L)
-    rate_low: float = 0.30
-    rate_high: float = 0.34
-    bracket: float = 30_000.0
-    small_limit: float = 1_000.0
-    div_taxable_share: float = 0.85    # listed company dividends
-    pil_taxable_share: float = 1.0     # payment in lieu (SYEP) — ordinary capital income
+    rate_low: Decimal = D("0.3")
+    rate_high: Decimal = D("0.34")
+    bracket: Decimal = D("30000")
+    small_limit: Decimal = D("1000")
+    div_taxable_share: Decimal = D("0.85")    # listed company dividends
+    pil_taxable_share: Decimal = ONE     # payment in lieu (SYEP) — ordinary capital income
     credit_interest_wht: bool = False
     fx_mode: str = "ibkr"              # "ibkr": IBKR's per-trade EUR; "ecb": ECB rate of the settlement date
     extra_regulated: str = ""          # user's additional regulated/equivalent exchanges, comma-separated
@@ -63,9 +64,9 @@ class PSettings:
     # year-start positions: {symbol: {"method": "lots"|"manual"|"olettama"|"ibkr",
     #   "lots": [{"date": "YYYY-MM-DD", "qty": n, "cost_eur": x} or {"date", "qty", "olettama": true}]}}
     opening_choices: dict = field(default_factory=dict)
-    treaty_rates: dict = field(default_factory=lambda: {"DK": 0.15, "US": 0.15, "SE": 0.15, "NO": 0.15, "DE": 0.15,
-                                                        "NL": 0.15, "CH": 0.10, "GB": 0.0, "AU": 0.15, "CA": 0.15,
-                                                        "FR": 0.0})
+    treaty_rates: dict = field(default_factory=lambda: {"DK": D("0.15"), "US": D("0.15"), "SE": D("0.15"), "NO": D("0.15"), "DE": D("0.15"),
+                                                        "NL": D("0.15"), "CH": D("0.1"), "GB": ZERO, "AU": D("0.15"), "CA": D("0.15"),
+                                                        "FR": ZERO})
 
 
 # How the acquisition cost (or, for a short, the original sale price) of a matched lot was determined
@@ -84,23 +85,23 @@ class Match:
     symbol: str
     sale_date: str
     buy_date: str
-    qty: float
-    proceeds: float      # luovutushinta EUR: GROSS sale price (before selling commission and put-premium deduction)
-    cost: float          # actual hankintameno + kulut EUR: purchase incl. commission, selling commission, put premium
+    qty: Decimal
+    proceeds: Decimal      # luovutushinta EUR: GROSS sale price (before selling commission and put-premium deduction)
+    cost: Decimal          # actual hankintameno + kulut EUR: purchase incl. commission, selling commission, put premium
     short: bool = False
     method: str = "fifo"  # key of SOURCES
-    premium: float = 0.0  # option premium EUR included in cost (exercised call or put)
-    presumption_rate: float = 0.0          # 0.2 / 0.4 when hankintameno-olettama may be used, else 0
-    deduction: float | None = None         # what is deducted: cost, or the olettama when it gives the lower gain
+    premium: Decimal = ZERO  # option premium EUR included in cost (exercised call or put)
+    presumption_rate: Decimal = ZERO          # 0.2 / 0.4 when hankintameno-olettama may be used, else 0
+    deduction: Decimal | None = None         # what is deducted: cost, or the olettama when it gives the lower gain
     note: str = ""                          # e.g. fractional shares paid in cash in a corporate action
 
     @property
-    def presumption(self) -> float:
+    def presumption(self) -> Decimal:
         return self.presumption_rate * self.proceeds
 
     @property
     def presumption_used(self) -> bool:
-        return self.deduction is not None and self.presumption_rate > 0 and abs(self.deduction - self.presumption) < 1e-9 \
+        return self.deduction is not None and self.presumption_rate > 0 and abs(self.deduction - self.presumption) < D("1e-9") \
             and (self.method == "olettama" or self.presumption > self.cost)
 
     @property
@@ -112,7 +113,7 @@ class Match:
         return f"{base} · olettama {r}" if self.presumption_used else base
 
     @property
-    def result(self) -> float:
+    def result(self) -> Decimal:
         return self.proceeds - (self.deduction if self.deduction is not None else self.cost)
 
 
@@ -123,10 +124,10 @@ class PBooks:
     matches: list[Match] = field(default_factory=list)
     derivatives: list = field(default_factory=list)
     cfd_rows: list = field(default_factory=list)   # {"date","symbol","cls","eur","source"}
-    v: dict[str, float] = field(default_factory=dict)
+    v: dict[str, Decimal] = field(default_factory=dict)
     wht_rows: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
-    ru_by_symbol: dict[str, float] = field(default_factory=dict)
+    ru_by_symbol: dict[str, Decimal] = field(default_factory=dict)
     opening: list[dict] = field(default_factory=list)    # year-start lots consumed this year + how they were handled
     crypto_matches: list[Match] = field(default_factory=list)  # virtuaalivaluuttojen luovutukset (FIFO per coin)
     option_events: list[dict] = field(default_factory=list)  # exercises / assignments and how the premium was used
@@ -152,53 +153,55 @@ def _ten_years(buy: str, sale: str) -> bool:
     return s_ >= anniv
 
 
-def _choice_lots(sym: str, opening: float, choice: dict | None, warnings: list[str],
+def _choice_lots(sym: str, opening: Decimal, choice: dict | None, warnings: list[str],
                  premium: bool = False) -> list[list]:
     """Year-start lots for `sym` from the user's choice: [qty_signed, eur_per_unit|None, date, method, 0.0].
     premium=True: an option position (cost = premium paid; no hankintameno-olettama)."""
     if not choice or choice.get("method") in (None, "", "unresolved"):
-        return [[opening, None, "avaava", "unresolved", 0.0]]
+        return [[opening, None, "avaava", "unresolved", ZERO]]
     if choice.get("method") == "ibkr":
-        return [[opening, None, "avaava", "ibkr", 0.0]]
-    sign = 1.0 if opening > 0 else -1.0
+        return [[opening, None, "avaava", "ibkr", ZERO]]
+    sign = ONE if opening > 0 else -ONE
     out, left = [], abs(opening)
     raw = choice.get("lots") or []
     for i, lot in enumerate(raw):
-        q = abs(float(lot.get("qty") or 0)) or (left if i == len(raw) - 1 else 0.0)
+        with located(section=f"Vuoden alun erät: {sym}", line=i + 1):
+            q = nonneg(dec(lot.get("qty") or 0, "määrä"), "määrä") or (left if i == len(raw) - 1 else ZERO)
+            d = check_date(lot["date"], "ostopäivä") if lot.get("date") else ""
+            cost = lot.get("cost_eur")
+            cost = None if cost in (None, "") else nonneg(dec(cost, "hankintameno"), "hankintameno")
         q = min(q, left)
-        if q <= 1e-9:
+        if q <= D("1e-9"):
             continue
-        d = str(lot.get("date") or "")[:10]
         if lot.get("olettama") or choice.get("method") == "olettama":
             if sign < 0 or not d or premium:
                 warnings.append(f"{sym}: hankintameno-olettama vaatii ostopäivän eikä sovellu lyhyeen positioon — "
                                 "erä jätetty ratkaisemattomaksi.")
-                out.append([sign * q, None, "avaava", "unresolved", 0.0])
+                out.append([sign * q, None, "avaava", "unresolved", ZERO])
             else:
-                out.append([sign * q, None, d, "olettama", 0.0])
+                out.append([sign * q, None, d, "olettama", ZERO])
         else:
-            cost = lot.get("cost_eur")
-            if cost in (None, "") or not d:
+            if cost is None or not d:
                 warnings.append(f"{sym}: alkuperäisestä erästä puuttuu ostopäivä tai hankintameno — erä jätetty "
                                 "ratkaisemattomaksi.")
-                out.append([sign * q, None, "avaava", "unresolved", 0.0])
+                out.append([sign * q, None, "avaava", "unresolved", ZERO])
             else:
-                out.append([sign * q, abs(float(cost)) / q, d, "manual", 0.0])
+                out.append([sign * q, cost / q, d, "manual", ZERO])
         left -= q
-    if left > 1e-6:
+    if left > D("1e-6"):
         warnings.append(f"{sym}: syötetyt erät ({_fi(abs(opening) - left, 4)} kpl) eivät kata vuoden alun positiota "
                         f"({_fi(abs(opening), 4)} kpl) — loput {_fi(left, 4)} kpl ratkaisemattomia.")
-        out.append([sign * left, None, "avaava", "unresolved", 0.0])
+        out.append([sign * left, None, "avaava", "unresolved", ZERO])
     return out
 
 
-def _ibkr_premium(st: Statement, ev: dict, leg: dict | None) -> float | None:
+def _ibkr_premium(st: Statement, ev: dict, leg: dict | None) -> Decimal | None:
     """IBKR folds an exercised call's premium into the share basis: premium ≈ basis − cash of the Ex share row,
     converted at the leg's own EUR/currency ratio. None when it cannot be derived (e.g. puts)."""
     if ev["right"] != "C" or not leg:
         return None
     for r in st.exercise_rows:
-        if r["date"] == ev["date"] and r["symbol"] == ev["underlying"] and abs(r["qty"] - leg["qty"]) < 1e-6 \
+        if r["date"] == ev["date"] and r["symbol"] == ev["underlying"] and abs(r["qty"] - leg["qty"]) < D("1e-6") \
                 and r["cash"] and abs(r["basis"]) > abs(r["cash"]):
             return (abs(r["basis"]) - abs(r["cash"])) * (leg["eur"] / abs(r["cash"]))
     return None
@@ -212,6 +215,7 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
     Written option assigned in the year it was written (OPT-H4): premium received → sale price of shares delivered
     (call) / off the cost of shares received (put). Written in an earlier year (OPT-H5, option A): no adjustment.
     `written` (optional dict) receives {"closed": [...], "open": [...]} records of written (short) option lots."""
+    st.normalize()
     choices = choices or {}
     legs = [dict(x) for x in st.stock_legs]
     start = st.period_start or ""
@@ -220,7 +224,7 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
         written.setdefault("open", [])
     if not st.option_trades:
         return [], legs
-    end_qty = defaultdict(float)
+    end_qty = defaultdict(Decimal)
     for p in st.positions:
         if p.asset_class in OPTION_CLASSES:
             end_qty[p.symbol] += p.quantity
@@ -230,23 +234,23 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
     events = []
     for sym, ts in by_sym.items():
         ts.sort(key=lambda x: (x[0], x[1]))
-        opening = end_qty.get(sym, 0.0) - sum(t["qty"] for _, _, t in ts)
+        opening = end_qty.get(sym, ZERO) - sum(t["qty"] for _, _, t in ts)
         lots: deque = deque()   # [contracts_signed, eur_per_contract or None, date, method]
-        if abs(opening) > 1e-9:
+        if abs(opening) > D("1e-9"):
             lots.extend([l[:4] for l in _choice_lots(sym, opening, choices.get(sym), warnings, premium=True)])
         for d, _, t in ts:
             q, cs = t["qty"], codes(t["code"])
             px = (t["eur"] / abs(q)) if (q and t["eur"] is not None) else None
             used, q0, closing_short = [], abs(q), q > 0 and lots and lots[0][0] < 0
-            while abs(q) > 1e-9 and lots and (lots[0][0] > 0) != (q > 0):
+            while abs(q) > D("1e-9") and lots and (lots[0][0] > 0) != (q > 0):
                 lot = lots[0]
                 n = min(abs(q), abs(lot[0]))
                 used.append((n, lot[1], lot[3], lot[2]))
                 lot[0] += n if lot[0] < 0 else -n
                 q += n if q < 0 else -n
-                if abs(lot[0]) < 1e-9:
+                if abs(lot[0]) < D("1e-9"):
                     lots.popleft()
-            if abs(q) > 1e-9:
+            if abs(q) > D("1e-9"):
                 lots.append([q, px, d, "fifo"])
             if used and closing_short and written is not None:   # written option bought back / expired / assigned
                 for n, e, m, od in used:
@@ -255,7 +259,7 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
                         t["basis_eur"] * n / q0 if t.get("basis_eur") else None)
                     written["closed"].append({
                         "symbol": sym, "opened": od, "closed": d, "contracts": n, "premium_eur": prem,
-                        "cost_eur": (px or 0.0) * n, "how": "A" if "A" in cs else ("Ep" if "Ep" in cs else "C"),
+                        "cost_eur": (px or ZERO) * n, "how": "A" if "A" in cs else ("Ep" if "Ep" in cs else "C"),
                         "same_year": same_year, "expiry": t.get("expiry", "")})
             if used and ("Ex" in cs or "A" in cs):
                 n_tot = sum(u[0] for u in used)
@@ -288,7 +292,7 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
             continue
         want = ev["contracts"] * ev["mult"] * (1 if ev["right"] == "C" else -1)
         leg = next((x for i, x in enumerate(legs) if i not in used_legs and x["symbol"] == ev["underlying"]
-                    and x["date"] == ev["date"] and abs(x["qty"] - want) < 1e-6), None)
+                    and x["date"] == ev["date"] and abs(x["qty"] - want) < D("1e-6")), None)
         if leg is None:
             warnings.append(f"{ev['symbol']}: toteutukselle {ev['date']} ei löytynyt osakekauppaa ({ev['underlying']}, "
                             f"{_fi(want, 0)} kpl) — preemiota ei kohdistettu.")
@@ -296,7 +300,7 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
             continue
         used_legs.add(legs.index(leg))
         prem = ev["premium_eur"]
-        if ev["unknown_contracts"] > 1e-9:
+        if ev["unknown_contracts"] > D("1e-9"):
             if "ibkr" in ev["methods"]:
                 sug = _ibkr_premium(st, ev, leg)
                 if sug is None:
@@ -310,9 +314,9 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
             leg["eur"] += prem
             ev["target"] = "Osakkeiden hankintamenoon"
         else:
-            leg["eur"] = max(leg["eur"] - prem, 0.0)
+            leg["eur"] = max(leg["eur"] - prem, ZERO)
             ev["target"] = "Vähennetty osakkeiden luovutushinnasta"
-        leg["opt_prem"] = leg.get("opt_prem", 0.0) + prem
+        leg["opt_prem"] = leg.get("opt_prem", ZERO) + prem
         leg["option"] = ev["symbol"]
     return events, legs
 
@@ -320,18 +324,18 @@ def option_events(st: Statement, warnings: list[str], choices: dict | None = Non
 def _assign(ev: dict, legs: list[dict], used_legs: set, warnings: list[str]) -> None:
     """OPT-H4 / OPT-H5 (option A) for an assigned written option."""
     prem, prior = ev["premium_eur"], ev["unknown_contracts"]
-    if prior > 1e-9:
+    if prior > D("1e-9"):
         warnings.append(f"{ev['symbol']}: toteutusvelvoite {ev['date']} — {_fi(prior, 0)} sopimusta asetettu aiempana "
                         "vuonna; preemio on verotettu asetusvuonna, eikä osakkeiden hintaa oikaista (OPT-H5).")
-    if prem <= 1e-9 or ev["right"] not in ("C", "P"):
-        ev["target"] = "Toteutusvelvoite — asetettu aiempana vuonna, ei oikaistu (OPT-H5)" if prior > 1e-9 \
+    if prem <= D("1e-9") or ev["right"] not in ("C", "P"):
+        ev["target"] = "Toteutusvelvoite — asetettu aiempana vuonna, ei oikaistu (OPT-H5)" if prior > D("1e-9") \
             else "Toteutusvelvoite — preemio tuntematon, ei oikaistu"
         return
     n_same = ev["contracts"] - prior
     want = n_same * ev["mult"] * (-1 if ev["right"] == "C" else 1)      # call: shares delivered; put: received
     leg = next((x for i, x in enumerate(legs) if i not in used_legs and x["symbol"] == ev["underlying"]
                 and x["date"] == ev["date"] and (x["qty"] > 0) == (want > 0)
-                and abs(abs(x["qty"]) - abs(ev["contracts"] * ev["mult"])) < 1e-6), None)
+                and abs(abs(x["qty"]) - abs(ev["contracts"] * ev["mult"])) < D("1e-6")), None)
     if leg is None:
         warnings.append(f"{ev['symbol']}: toteutusvelvoitteelle {ev['date']} ei löytynyt osakekauppaa — preemiota ei "
                         "kohdistettu.")
@@ -343,7 +347,7 @@ def _assign(ev: dict, legs: list[dict], used_legs: set, warnings: list[str]) -> 
         ev["target"] = "Lisätty toimitettujen osakkeiden luovutushintaan (OPT-H4)"
     else:                        # premium received lowers the acquisition cost of the shares received
         leg.setdefault("eur_orig", leg["eur"])
-        leg["eur"] = max(leg["eur"] - prem, 0.0)
+        leg["eur"] = max(leg["eur"] - prem, ZERO)
         ev["target"] = "Vähennetty saatujen osakkeiden hankintamenosta (OPT-H4)"
     leg["option"] = ev["symbol"]
 
@@ -364,6 +368,7 @@ def corporate_events(st: Statement) -> tuple[dict[str, list[dict]], dict[str, st
 
     Rows of one action (same date, type and ratio) are grouped; when the old line is removed under one ticker and the
     new one added under another (typical reverse split), the old ticker's lots move to the new ticker."""
+    st.normalize()
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for r in st.corporate_actions:
         m = _CA_RATIO.search(r["description"])
@@ -382,7 +387,7 @@ def corporate_events(st: Statement) -> tuple[dict[str, list[dict]], dict[str, st
         for sym, rs in by_sym.items():
             pe = [r["proceeds_eur"] for r in rs]
             events[sym].append({"date": d, "symbol": sym, "kind": kind,
-                                "ratio": (float(ratio[0]), float(ratio[1])) if ratio else None,
+                                "ratio": (dec(ratio[0]), dec(ratio[1])) if ratio else None,
                                 "delta": sum(r["qty"] for r in rs),
                                 "proceeds_eur": None if any(p is None for p in pe) else sum(pe),
                                 "description": rs[0]["description"]})
@@ -396,8 +401,9 @@ def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None,
 
     Returns this period's disposals and the lots still open at period end. The year-start position (end holding
     minus all known trades) is handled by the user's choice for that symbol; without one it is 'unresolved'."""
+    st.normalize()
     choices = choices or {}
-    end_qty = defaultdict(float)
+    end_qty = defaultdict(Decimal)
     for p in st.positions:
         if p.asset_class in classes:
             end_qty[p.symbol] += p.quantity
@@ -409,15 +415,15 @@ def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None,
         legs_by_sym[rename.get(x["symbol"], x["symbol"])].append((x["date"], i, x))
     out: list[Match] = []
     end_lots: list[dict] = []
-    for sym in sorted(set(legs_by_sym) | set(ca_events) | {k for k, q in end_qty.items() if abs(q) > 1e-9}):
+    for sym in sorted(set(legs_by_sym) | set(ca_events) | {k for k, q in end_qty.items() if abs(q) > D("1e-9")}):
         # corporate actions take effect at the start of their day, before that day's trades
         seq = sorted([(d, 1, i, x) for d, i, x in legs_by_sym.get(sym, [])]
                      + [(e["date"], 0, j, e) for j, e in enumerate(ca_events.get(sym, []))], key=lambda t: t[:3])
         legs = [(d, i, x) for d, k, i, x in seq if k == 1]
-        opening = (end_qty.get(sym, 0.0) - sum(x["qty"] for _, _, x in legs)
+        opening = (end_qty.get(sym, ZERO) - sum(x["qty"] for _, _, x in legs)
                    - sum(e["delta"] for e in ca_events.get(sym, []) if e["kind"] != "unknown"))
         lots: deque = deque()  # [qty_signed, eur_per_share or None, date, method, option premium per share]
-        if abs(opening) > 1e-9:
+        if abs(opening) > D("1e-9"):
             lots.extend(_choice_lots(sym, opening, choices.get(sym), warnings))
         stop = False
         for d, kind, _, x in seq:
@@ -428,28 +434,28 @@ def fifo_full(st: Statement, warnings: list[str], choices: dict | None = None,
                 if stop and blocked is not None:
                     blocked.append(sym)
                 continue
-            q, px = x["qty"], x["eur"] / abs(x["qty"]) if x["qty"] else 0.0
-            pps = x.get("opt_prem", 0.0) / abs(x["qty"]) if x["qty"] else 0.0
+            q, px = x["qty"], x["eur"] / abs(x["qty"]) if x["qty"] else ZERO
+            pps = x.get("opt_prem", ZERO) / abs(x["qty"]) if x["qty"] else ZERO
             # gross sale price per share: before the selling commission and before a put-premium deduction
-            gross = ((x.get("eur_orig", x["eur"]) + (x.get("comm_eur") or 0.0)) / abs(q)) if q else 0.0
+            gross = ((x.get("eur_orig", x["eur"]) + (x.get("comm_eur") or ZERO)) / abs(q)) if q else ZERO
             in_period = d >= start
-            while abs(q) > 1e-9 and lots and (lots[0][0] > 0) != (q > 0):
+            while abs(q) > D("1e-9") and lots and (lots[0][0] > 0) != (q > 0):
                 lot = lots[0]
                 n = min(abs(q), abs(lot[0]))
                 if in_period:
                     if q < 0:   # selling against long lot: gross price; costs = purchase + (gross − net) of the sale
-                        cost = 0.0 if lot[3] == "olettama" else (lot[1] or 0.0) * n + (gross - px) * n
+                        cost = ZERO if lot[3] == "olettama" else (lot[1] or ZERO) * n + (gross - px) * n
                         m = Match(sym, d, lot[2], n, gross * n, cost, method=lot[3],
-                                  presumption_rate=0.4 if _ten_years(lot[2], d) else 0.2)
+                                  presumption_rate=D("0.4") if _ten_years(lot[2], d) else D("0.2"))
                     else:       # buying back a short lot
-                        m = Match(sym, d, lot[2], n, (lot[1] or 0.0) * n, px * n, short=True, method=lot[3])
+                        m = Match(sym, d, lot[2], n, (lot[1] or ZERO) * n, px * n, short=True, method=lot[3])
                     m.premium = (lot[4] + pps) * n
                     out.append(m)
                 lot[0] += n if lot[0] < 0 else -n
                 q += n if q < 0 else -n
-                if abs(lot[0]) < 1e-9:
+                if abs(lot[0]) < D("1e-9"):
                     lots.popleft()
-            if abs(q) > 1e-9:
+            if abs(q) > D("1e-9"):
                 lots.append([q, px, d, "fifo" if in_period else "history", pps])
         for lot in lots:
             known = lot[1] is not None
@@ -463,7 +469,7 @@ def _apply_ca(sym: str, ev: dict, lots: deque, in_period: bool, out: list, warni
               log: list[dict] | None) -> bool:
     """Apply a split / stock dividend to the open lots (Vero: total acquisition cost and holding period unchanged;
     cash for fractional shares is a disposal). Returns True when FIFO must stop for the symbol (unknown action)."""
-    entry = dict(ev, factor=None, fraction=0.0, handled="")
+    entry = dict(ev, factor=None, fraction=ZERO, handled="")
     if log is not None:
         log.append(entry)
     held = sum(l[0] for l in lots)
@@ -472,7 +478,7 @@ def _apply_ca(sym: str, ev: dict, lots: deque, in_period: bool, out: list, warni
                         "keskeytetty tälle osakkeelle; tarkista käsin. Laskelma on keskeneräinen.")
         entry["handled"] = "Tuntematon — FIFO keskeytetty"
         return True
-    if abs(held) < 1e-9:
+    if abs(held) < D("1e-9"):
         warnings.append(f"{sym}: yritystapahtuma {ev['date']}, mutta ei avoimia eriä — ohitettu.")
         entry["handled"] = "Ei avoimia eriä — ohitettu"
         return False
@@ -483,10 +489,10 @@ def _apply_ca(sym: str, ev: dict, lots: deque, in_period: bool, out: list, warni
     else:
         f = after / held
     fraction = held * f - after                  # shares (new units) not delivered → paid in cash
-    if fraction < -1e-6:
+    if fraction < -D("1e-6"):
         warnings.append(f"{sym}: yritystapahtuman {ev['date']} määrät eivät täsmää suhteeseen — käytetty IBKR:n määriä.")
-        f, fraction = after / held, 0.0
-    if f <= 1e-12:      # the whole position disappeared: not a split we can apply
+        f, fraction = after / held, ZERO
+    if f <= D("1e-12"):      # the whole position disappeared: not a split we can apply
         warnings.append(f"{sym}: yritystapahtuma {ev['date']} poisti koko position ({ev['description'][:80]}) — "
                         "FIFO-laskenta keskeytetty tälle osakkeelle; tarkista käsin. Laskelma on keskeneräinen.")
         entry["handled"] = "Positio poistui — FIFO keskeytetty"
@@ -496,25 +502,25 @@ def _apply_ca(sym: str, ev: dict, lots: deque, in_period: bool, out: list, warni
         if l[1] is not None:
             l[1] /= f
         l[4] /= f
-    entry["factor"], entry["fraction"] = f, max(fraction, 0.0)
+    entry["factor"], entry["fraction"] = f, max(fraction, ZERO)
     entry["handled"] = "Erät kerrottu suhteella, hankintameno ennallaan"
-    if fraction > 1e-6:
+    if fraction > D("1e-6"):
         cash = ev["proceeds_eur"]
         if cash is None:
             warnings.append(f"{sym}: murto-osien käteissuoritus {ev['date']} ilman EUR-määrää — luovutus 0 €.")
-            cash = 0.0
+            cash = ZERO
         left, sign = fraction, (1 if held > 0 else -1)
-        while left > 1e-9 and lots:
+        while left > D("1e-9") and lots:
             lot = lots[0]
             n = min(left, abs(lot[0]))
             if in_period and sign > 0:
                 out.append(Match(sym, ev["date"], lot[2], n, cash * n / fraction,
-                                 0.0 if lot[3] == "olettama" else (lot[1] or 0.0) * n, method=lot[3],
-                                 presumption_rate=0.4 if _ten_years(lot[2], ev["date"]) else 0.2,
+                                 ZERO if lot[3] == "olettama" else (lot[1] or ZERO) * n, method=lot[3],
+                                 presumption_rate=D("0.4") if _ten_years(lot[2], ev["date"]) else D("0.2"),
                                  note="murto-osa, yritystapahtuma"))
             lot[0] -= sign * n
             left -= n
-            if abs(lot[0]) < 1e-9:
+            if abs(lot[0]) < D("1e-9"):
                 lots.popleft()
         entry["handled"] += f"; murto-osa {_fi(fraction, 4)} kpl luovutettu käteisellä"
     return False
@@ -523,6 +529,7 @@ def _apply_ca(sym: str, ev: dict, lots: deque, in_period: bool, out: list, warni
 def crypto_fifo(st: Statement, warnings: list[str], choices: dict | None = None) -> tuple[list[Match], list[dict]]:
     """Crypto assets: FIFO per coin like shares (Vero: virtuaalivaluutat are disposed in acquisition order),
     with year-start lots, IBKR back-out, hankintameno-olettama. No corporate actions or option effects."""
+    st.normalize()
     if not st.crypto_legs:
         return [], []
     from dataclasses import replace
@@ -537,7 +544,7 @@ def fifo(st: Statement, warnings: list[str], choices: dict | None = None) -> lis
     return fifo_full(st, warnings, choices, legs)[0]
 
 
-def _ibkr_backout(matches: list[Match], ru: dict[str, float]) -> dict[str, float]:
+def _ibkr_backout(matches: list[Match], ru: dict[str, Decimal]) -> dict[str, Decimal]:
     """Lots without a known cost ('ibkr'/'unresolved'): back out their cost so the symbol's total equals IBKR's
     realized P/L. Returns the backed-out cost (long) / proceeds (short) per symbol."""
     by_sym = defaultdict(list)
@@ -549,7 +556,7 @@ def _ibkr_backout(matches: list[Match], ru: dict[str, float]) -> dict[str, float
         if not op:
             continue
         known = sum(m.proceeds - m.cost for m in ms if m.method not in ("ibkr", "unresolved", "olettama"))
-        target = ru.get(sym, 0.0) - known
+        target = ru.get(sym, ZERO) - known
         tot_qty = sum(m.qty for m in op)
         for m in op:
             share = m.qty / tot_qty if tot_qty else 0
@@ -566,7 +573,7 @@ def apply_presumption(matches: list[Match], enabled: bool) -> None:
     used instead of all actual costs when it gives the lower gain; it never creates or increases a loss."""
     for m in matches:
         if m.short or m.presumption_rate <= 0:
-            m.presumption_rate, m.deduction = 0.0, m.cost
+            m.presumption_rate, m.deduction = ZERO, m.cost
         elif m.method == "olettama":          # the user chose the olettama for a year-start lot
             m.deduction = m.presumption
         elif enabled and m.presumption > m.cost:
@@ -575,14 +582,14 @@ def apply_presumption(matches: list[Match], enabled: bool) -> None:
             m.deduction = m.cost
 
 
-def opening_summary(matches: list[Match], backout: dict[str, float]) -> list[dict]:
+def opening_summary(matches: list[Match], backout: dict[str, Decimal]) -> list[dict]:
     """Year-start lots consumed this period, per symbol (for the UI step and the workbook)."""
     agg: dict[str, dict] = {}
     for m in matches:
         if m.method in ("fifo", "history"):
             continue
-        a = agg.setdefault(m.symbol, {"symbol": m.symbol, "short": m.short, "qty": 0.0, "proceeds_eur": 0.0,
-                                      "cost_eur": 0.0, "first_sale": m.sale_date, "last_sale": m.sale_date,
+        a = agg.setdefault(m.symbol, {"symbol": m.symbol, "short": m.short, "qty": ZERO, "proceeds_eur": ZERO,
+                                      "cost_eur": ZERO, "first_sale": m.sale_date, "last_sale": m.sale_date,
                                       "methods": set()})
         a["qty"] += m.qty
         a["proceeds_eur"] += m.proceeds
@@ -599,9 +606,10 @@ def opening_summary(matches: list[Match], backout: dict[str, float]) -> list[dic
 
 def opening_lots(st: Statement) -> list[dict]:
     """Year-start positions that this period's sales consume and that need the user's decision (no history)."""
+    st.normalize()
     ms = fifo(st, [])
     ru = {r.symbol: r.realized for r in st.ru if r.asset_class == "Stocks"}
-    end_qty = defaultdict(float)
+    end_qty = defaultdict(Decimal)
     for p in st.positions:
         if p.asset_class == "Stocks":
             end_qty[p.symbol] += p.quantity
@@ -612,7 +620,7 @@ def opening_lots(st: Statement) -> list[dict]:
     for r in rows:   # the whole year-start position (the user enters lots for all of it)
         legs = [x["qty"] for x in list(st.history_legs) + list(st.stock_legs)
                 if rename.get(x["symbol"], x["symbol"]) == r["symbol"]]
-        r["opening_qty"] = (end_qty.get(r["symbol"], 0.0) - sum(legs)
+        r["opening_qty"] = (end_qty.get(r["symbol"], ZERO) - sum(legs)
                             - sum(e["delta"] for e in ca.get(r["symbol"], []) if e["kind"] != "unknown"))
         r["ccy"] = next((x["ccy"] for x in st.stock_legs if x["symbol"] == r["symbol"]), "")
     cm, _ = crypto_fifo(st, [])
@@ -630,11 +638,11 @@ def option_opening(events: list[dict], st: Statement) -> list[dict]:
     """Exercised options opened before the period (premium unknown) — need the user's decision like shares."""
     out = {}
     for ev in events:
-        if ev["kind"] != "exercise" or ev["unknown_contracts"] <= 1e-9:
+        if ev["kind"] != "exercise" or ev["unknown_contracts"] <= D("1e-9"):
             continue
         o = out.setdefault(ev["symbol"], {
-            "symbol": ev["symbol"], "kind": "option", "short": False, "qty": 0.0, "proceeds_eur": None,
-            "cost_eur": 0.0, "first_sale": ev["date"], "last_sale": ev["date"], "methods": ev["methods"],
+            "symbol": ev["symbol"], "kind": "option", "short": False, "qty": ZERO, "proceeds_eur": None,
+            "cost_eur": ZERO, "first_sale": ev["date"], "last_sale": ev["date"], "methods": ev["methods"],
             "ibkr_suggestion_eur": None, "ccy": next((t["ccy"] for t in st.option_trades if t["symbol"] == ev["symbol"]), ""),
             "opening_qty": sum(p.quantity for p in st.positions if p.symbol == ev["symbol"])
                            - sum(t["qty"] for t in st.option_trades if t["symbol"] == ev["symbol"]),
@@ -642,11 +650,14 @@ def option_opening(events: list[dict], st: Statement) -> list[dict]:
         o["qty"] += ev["unknown_contracts"]
         o["last_sale"] = max(o["last_sale"], ev["date"])
         if ev.get("ibkr_suggestion_eur") is not None:
-            o["ibkr_suggestion_eur"] = (o["ibkr_suggestion_eur"] or 0.0) + ev["ibkr_suggestion_eur"] * ev["unknown_contracts"] / ev["contracts"]
+            o["ibkr_suggestion_eur"] = (o["ibkr_suggestion_eur"] or ZERO) + ev["ibkr_suggestion_eur"] * ev["unknown_contracts"] / ev["contracts"]
     return list(out.values())
 
 
 def build_personal(st: Statement, s: PSettings) -> PBooks:
+    from .num import decimalize
+    st.normalize()
+    decimalize(s)
     ecb_note = None
     if s.fx_mode == "ecb":
         from dataclasses import replace
@@ -709,7 +720,7 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     v["sec_net"] = v["sec_gains"] + v["sec_losses"]
     v["sec_net_actual"] = sum(m.proceeds - m.cost for m in M)
     used = [m for m in M if m.presumption_used]
-    v["presumption_lots"] = float(len(used))
+    v["presumption_lots"] = D(len(used))
     v["presumption_benefit"] = sum(m.presumption - m.cost for m in used if m.method != "olettama")
     v["ru_sec_net"] = sum(b.ru_by_symbol.values())
 
@@ -732,8 +743,8 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
         b.warnings.append("Markkinapaikka tuntematon (" + ", ".join(unknown[:10]) + ("…" if len(unknown) > 10 else "")
                           + "): tappiot on oletettu vähennyskelpoisiksi. Activity Statement CSV kertoo markkinapaikan.")
     fx = [r for r in st.ru if r.asset_class == "Forex"]
-    v["fx_gains"] = sum(r.profit for r in fx) if s.include_fx else 0.0
-    v["fx_losses"] = sum(r.loss for r in fx) if s.include_fx else 0.0
+    v["fx_gains"] = sum(r.profit for r in fx) if s.include_fx else ZERO
+    v["fx_losses"] = sum(r.loss for r in fx) if s.include_fx else ZERO
     v["fx_memo"] = sum(r.realized for r in fx)
     _cfd(b)
     C = b.crypto_matches
@@ -751,13 +762,13 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
 
     # small disposals: all sale prices of the year together (securities + crypto)
     tot_proceeds = v["sec_proceeds"] + v["crypto_proceeds"]
-    v["small_exempt"] = 1.0 if 0 < tot_proceeds <= s.small_limit else 0.0
+    v["small_exempt"] = ONE if 0 < tot_proceeds <= s.small_limit else ZERO
     sec_g, sec_l = v["sec_gains"], v["sec_losses"]
     cr_g, cr_l = v["crypto_gains"], v["crypto_losses"]
     if v["small_exempt"]:
-        sec_g = cr_g = 0.0
+        sec_g = cr_g = ZERO
         if v["sec_cost_actual"] + v["crypto_cost_actual"] <= s.small_limit:
-            sec_l = cr_l = 0.0
+            sec_l = cr_l = ZERO
     v["disp_gains"] = sec_g + cr_g + v["der_gains"] + v["fx_gains"]
     v["disp_losses"] = sec_l + cr_l + v["der_losses"] + v["fx_losses"]
     v["disp_net"] = v["disp_gains"] + v["disp_losses"]
@@ -771,7 +782,7 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     v["int_expense"] = -sum(x.amount_eur for x in st.interest if x.amount_eur < 0 and not _is_cfd_cost(x.description))
     cfd_int = -sum(x.amount_eur for x in st.interest if x.amount_eur < 0 and _is_cfd_cost(x.description))
     cfd_fee = -sum(x.amount_eur for x in st.fees if _is_cfd_cost(x.description))
-    v["fees"] = -(st.fees_total_eur or 0.0) - cfd_fee
+    v["fees"] = -(st.fees_total_eur or ZERO) - cfd_fee
     v["cfd_costs_ignored"] = cfd_int + cfd_fee
     v["wht_div"] = -sum(x.amount_eur for x in st.withholding if _is_div_wht(x.description))
     v["wht_int"] = -sum(x.amount_eur for x in st.withholding if not _is_div_wht(x.description))
@@ -780,14 +791,14 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     v["other_ci"] = v["div_taxable"] + v["pil_taxable"] + v["int_income"] + v["cfd_gains"]
     v["deductions"] = v["int_expense"] + v["fees"]
     before_cf = v["disp_net"] + v["other_ci"] - v["deductions"]
-    v["cf_used"] = min(s.loss_carryforward, max(0.0, v["disp_net"] + v["other_ci"]))
+    v["cf_used"] = min(s.loss_carryforward, max(ZERO, v["disp_net"] + v["other_ci"]))
     v["capital_income"] = before_cf - v["cf_used"]
-    v["new_loss"] = max(0.0, -(v["disp_net"] + v["other_ci"])) if v["disp_net"] < 0 else 0.0
-    po = max(v["capital_income"], 0.0)
-    v["tax_gross"] = s.rate_low * min(po, s.bracket) + s.rate_high * max(po - s.bracket, 0.0)
+    v["new_loss"] = max(ZERO, -(v["disp_net"] + v["other_ci"])) if v["disp_net"] < 0 else ZERO
+    po = max(v["capital_income"], ZERO)
+    v["tax_gross"] = s.rate_low * min(po, s.bracket) + s.rate_high * max(po - s.bracket, ZERO)
 
-    credit = 0.0
-    gross_by_c, wht_by_c = defaultdict(float), defaultdict(float)
+    credit = ZERO
+    gross_by_c, wht_by_c = defaultdict(Decimal), defaultdict(Decimal)
     for d in st.dividends:
         if not _is_pil(d.description):
             c_ = wht_country(d.description + " - " + _div_country(st, d.description), d.currency)
@@ -798,22 +809,22 @@ def build_personal(st: Statement, s: PSettings) -> PBooks:
     eff_rate = (v["tax_gross"] / po) if po else s.rate_low
     for c_, w in wht_by_c.items():
         gross = gross_by_c.get(c_, v["div_ord"])
-        treaty = s.treaty_rates.get(c_, 0.15)
+        treaty = s.treaty_rates.get(c_, D("0.15"))
         cr = min(w, treaty * gross, eff_rate * gross * s.div_taxable_share)
         credit += cr
         b.wht_rows.append({"country": c_, "type": "Osinko", "gross": gross, "wht": w, "rate": w / gross if gross else 0,
-                           "treaty": treaty, "credit": cr, "reclaim": max(0.0, w - treaty * gross)})
+                           "treaty": treaty, "credit": cr, "reclaim": max(ZERO, w - treaty * gross)})
     if v["wht_int"]:
-        cr = min(v["wht_int"], eff_rate * v["int_income"]) if s.credit_interest_wht else 0.0
+        cr = min(v["wht_int"], eff_rate * v["int_income"]) if s.credit_interest_wht else ZERO
         credit += cr
         b.wht_rows.append({"country": "IE", "type": "Korko", "gross": v["int_income"], "wht": v["wht_int"],
-                           "rate": v["wht_int"] / v["int_income"] if v["int_income"] else 0, "treaty": 0.0,
+                           "rate": v["wht_int"] / v["int_income"] if v["int_income"] else 0, "treaty": ZERO,
                            "credit": cr, "reclaim": v["wht_int"] - cr})
     v["tax_credit"] = min(credit, v["tax_gross"])
     v["tax_net"] = v["tax_gross"] - v["tax_credit"]
     v["reclaim"] = sum(r["reclaim"] for r in b.wht_rows)
 
-    if abs(v["sec_net_actual"] - v["ru_sec_net"]) > 0.02 * max(1.0, abs(v["ru_sec_net"])) + 50:
+    if abs(v["sec_net_actual"] - v["ru_sec_net"]) > D("0.02") * max(ONE, abs(v["ru_sec_net"])) + 50:
         b.warnings.append(f"Osakkeiden FIFO-tulos {_fi(v['sec_net_actual'], 0)} € (todellisilla hankintamenoilla) poikkeaa IBKR:n R&U-tuloksesta "
                           f"{_fi(v['ru_sec_net'], 0)} € — ero johtuu valuuttakurssimenetelmästä (Vero: osto- ja "
                           "myyntipäivän kurssit). Tarkista, jos ero on suuri.")
@@ -838,10 +849,10 @@ def _written_options(b: PBooks) -> None:
     OPT-H7/H8: written and closed in the same year: hankintameno-olettama 20 % of the premium (no buyback cost) when
             it gives the lower gain. Assignments: handled in the shares (OPT-H4) or not at all (OPT-H5)."""
     v, s, W = b.v, b.s, b.written
-    ru = defaultdict(float)
+    ru = defaultdict(Decimal)
     for r in b.derivatives:
         ru[r.symbol] += r.realized
-    open_p = prior = prior_nd = benefit = 0.0
+    open_p = prior = prior_nd = benefit = ZERO
     unknown = set()
     for o in W.get("open", []):
         if not o["same_year"]:
@@ -861,7 +872,7 @@ def _written_options(b: PBooks) -> None:
         if not c["same_year"]:
             adj = c["premium_eur"]
             if c["symbol"] in b.nondeductible:        # loss not deductible: only remove a gain
-                adj = min(adj, max(0.0, ru[c["symbol"]]))
+                adj = min(adj, max(ZERO, ru[c["symbol"]]))
             ru[c["symbol"]] -= adj
             prior += adj
             if c["symbol"] in b.nondeductible:
@@ -869,8 +880,8 @@ def _written_options(b: PBooks) -> None:
             b.wopt_rows.append({"rule": "OPT-H6", "symbol": c["symbol"], "date": c["closed"], "contracts": c["contracts"],
                                 "amount": -adj, "label": "Asetettu aiempana vuonna: jo verotettu preemio vähennetään"})
         elif s.use_presumption:
-            gain, olettama = c["premium_eur"] - c["cost_eur"], 0.8 * c["premium_eur"]
-            if gain > olettama + 1e-9:
+            gain, olettama = c["premium_eur"] - c["cost_eur"], D("0.8") * c["premium_eur"]
+            if gain > olettama + D("1e-9"):
                 benefit += gain - olettama
                 b.wopt_rows.append({"rule": "OPT-H7", "symbol": c["symbol"], "date": c["closed"],
                                     "contracts": c["contracts"], "amount": -(gain - olettama),
@@ -906,7 +917,7 @@ def _cfd(b: PBooks) -> None:
     v["cfd_losses_ignored"] = sum(x["eur"] for x in b.cfd_rows if x["eur"] < 0)
     v["ru_cfd_net"] = sum(r.realized for r in ru)
     net = v["cfd_gains"] + v["cfd_losses_ignored"]
-    if ru and abs(net - v["ru_cfd_net"]) > 0.02 * max(1.0, abs(v["ru_cfd_net"])) + 50:
+    if ru and abs(net - v["ru_cfd_net"]) > D("0.02") * max(ONE, abs(v["ru_cfd_net"])) + 50:
         b.warnings.append(f"CFD-kauppojen tulos {_fi(net, 0)} € poikkeaa IBKR:n R&U-tuloksesta "
                           f"{_fi(v['ru_cfd_net'], 0)} € — tarkista CFD-kaupat.")
     if b.cfd_rows:
@@ -914,7 +925,7 @@ def _cfd(b: PBooks) -> None:
                           "(Verohallinto). IBKR:n CFD-provisioita ei ole vähennetty voitoista.")
 
 
-def omavero_fields(b: PBooks) -> list[tuple[str, str, float, str]]:
+def omavero_fields(b: PBooks) -> list[tuple[str, str, Decimal, str]]:
     v = b.v
     rows = [
         ("Arvopapereiden luovutukset (OmaVero / 9A)", "Osakkeet ja rahastot — luovutushinnat yhteensä", v["sec_proceeds"], "Bruttomyyntihinnat (ennen myyntikuluja)"),

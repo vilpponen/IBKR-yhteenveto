@@ -473,7 +473,7 @@ $("#dlLots").onclick = () => {   // open lots at year end -> next year's year-st
     if(l.cost_eur == null && !l.olettama){ missing.push(l.symbol); continue; }
     const c = ch[l.symbol] = ch[l.symbol] || {method: "lots", lots: []};
     c.lots.push(l.olettama ? {date: l.date, qty: Math.abs(l.qty), olettama: true}
-                           : {date: l.date, qty: Math.abs(l.qty), cost_eur: Math.round(l.cost_eur * 100) / 100});
+                           : {date: l.date, qty: Math.abs(l.qty), cost_eur: l.cost_eur});   // full precision: next year's FIFO stays exact
   }
   saveJson({version: 1, account: result.end_lots.account, as_of: result.end_lots.as_of, choices: ch,
             missing_cost: [...new Set(missing)]}, `vuoden_lopun_erat_${result.end_lots.as_of}.json`);

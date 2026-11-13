@@ -3,6 +3,7 @@
 Rows follow IBKR's documented format: the option row closing by exercise has code 'C;Ex' and no realized P/L; the
 share row created by the exercise has code 'O;Ex' (call) / 'C;Ex' (put) and IBKR folds the premium into its basis.
 """
+from decimal import Decimal
 import io
 
 import pytest
@@ -107,7 +108,7 @@ def test_usd_premium_converted_with_class_ratio():
             + "Trades,Total,,Equity and Index Options,USD,,,,,,-200,-2,202,0,0,\n"
             + "Trades,Total,,Equity and Index Options,EUR,,,,,,-180,-1.8,181.8,0,0,\n" + FII).encode()
     (o,) = load([("s.csv", data)]).option_trades
-    assert o["eur"] == pytest.approx(202 * 0.9)                     # paid = |−200 + (−2)| × 0.9 and (o["underlying"], o["right"], o["mult"]) == ("AAA", "C", 100)
+    assert o["eur"] == pytest.approx(Decimal("181.8"))                     # paid = |−200 + (−2)| × 0.9 and (o["underlying"], o["right"], o["mult"]) == ("AAA", "C", 100)
 
 
 def test_csv_buy_commission_increases_cost():

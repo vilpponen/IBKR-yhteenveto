@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass, field
 
 from .model import Statement
+from .num import IBKR_TOL, ONE, TIE_TOL, ZERO, D, Decimal
 
 DEFAULT_ACCOUNTS = {
     "cash": ("1910", "Pankkitili / IBKR käteinen (positiiviset saldot)"),
@@ -53,21 +54,21 @@ class Settings:
     company: str = ""
     fiscal_year: str = ""
     share_category: str = "muu omaisuus"   # or "rahoitusomaisuus" (EVL 9 §) — ask kirjanpitäjä
-    opening_writedowns: float = 0.0        # write-down provision at period start (from last year's file)
-    opening_unbooked_gains: float = 0.0    # unrealized gains not booked at period start
-    evl8a_carryforward: float = 0.0        # prior years' unused share losses (EVL 8 a §)
-    wopt_premium_carry: float = 0.0        # OPT-Y2: premiums taxed in earlier years for options closed this year (EUR)
+    opening_writedowns: Decimal = ZERO        # write-down provision at period start (from last year's file)
+    opening_unbooked_gains: Decimal = ZERO    # unrealized gains not booked at period start
+    evl8a_carryforward: Decimal = ZERO        # prior years' unused share losses (EVL 8 a §)
+    wopt_premium_carry: Decimal = ZERO        # OPT-Y2: premiums taxed in earlier years for options closed this year (EUR)
     # OPT-Y8: open written options at year-end — {symbol: "addback" | "deduct" | "fair_value"} (user's choice per option)
     wopt_y8: dict = field(default_factory=dict)
     fair_value_5_2a: bool = False          # company values trading financial instruments at fair value (KPL 5:2a)
-    wopt_loss_carry: float = 0.0           # OPT-Y8: written-option book losses added back last year (part of opening_writedowns)
-    transaction_fees_override: float | None = None  # negative EUR, e.g. -2458.32
-    tax_rate: float = 0.20
+    wopt_loss_carry: Decimal = ZERO           # OPT-Y8: written-option book losses added back last year (part of opening_writedowns)
+    transaction_fees_override: Decimal | None = None  # negative EUR (FTT entered by the user)
+    tax_rate: Decimal = D("0.2")
     credit_interest_wht: bool = False      # IE interest WHT: treaty 0 % -> reclaim from Ireland by default
     etf_symbols: set[str] = field(default_factory=set)
-    treaty_rates: dict = field(default_factory=lambda: {"DK": 0.15, "US": 0.15, "SE": 0.15, "NO": 0.15,
-                                                        "DE": 0.15, "NL": 0.15, "CH": 0.10, "GB": 0.0,
-                                                        "AU": 0.15, "CA": 0.15, "FR": 0.0})
+    treaty_rates: dict = field(default_factory=lambda: {"DK": D("0.15"), "US": D("0.15"), "SE": D("0.15"), "NO": D("0.15"),
+                                                        "DE": D("0.15"), "NL": D("0.15"), "CH": D("0.1"), "GB": ZERO,
+                                                        "AU": D("0.15"), "CA": D("0.15"), "FR": ZERO})
     accounts: dict = field(default_factory=lambda: dict(DEFAULT_ACCOUNTS))
 
 
@@ -75,18 +76,18 @@ class Settings:
 class SymbolVal:
     asset_class: str
     symbol: str
-    realized_profit: float
-    realized_loss: float
-    unrealized: float
+    realized_profit: Decimal
+    realized_loss: Decimal
+    unrealized: Decimal
     is_share: bool
 
     @property
-    def writedown(self) -> float:      # positive amount booked as expense
-        return max(-self.unrealized, 0.0)
+    def writedown(self) -> Decimal:      # positive amount booked as expense
+        return max(-self.unrealized, ZERO)
 
     @property
-    def unbooked_gain(self) -> float:  # positive amount not booked
-        return max(self.unrealized, 0.0)
+    def unbooked_gain(self) -> Decimal:  # positive amount not booked
+        return max(self.unrealized, ZERO)
 
 
 @dataclass
@@ -94,8 +95,8 @@ class Books:
     st: Statement
     s: Settings
     symbols: list[SymbolVal] = field(default_factory=list)
-    v: dict[str, float] = field(default_factory=dict)       # every number used in the workbook
-    checks: list[tuple[str, float, float, str]] = field(default_factory=list)  # (name, ours, ibkr, note)
+    v: dict[str, Decimal] = field(default_factory=dict)       # every number used in the workbook
+    checks: list[tuple[str, Decimal, Decimal, str]] = field(default_factory=list)  # (name, ours, ibkr, note)
     warnings: list[str] = field(default_factory=list)
     wht_rows: list[dict] = field(default_factory=list)
     wopt_y8: list[dict] = field(default_factory=list)       # OPT-Y8 rows: open written options at year-end
@@ -111,15 +112,15 @@ def open_written_options(st: Statement) -> list[dict]:
     """Option positions with a negative quantity at period end (written options still open) and their book loss:
     the lower-of-cost write-down (KPL 5:6) from IBKR's unrealized result for the symbol."""
     from .parse_common import OPTION_CLASSES
-    qty: dict[str, float] = {}
+    qty: dict[str, Decimal] = {}
     for p in st.positions:
         if p.asset_class in OPTION_CLASSES:
-            qty[p.symbol] = qty.get(p.symbol, 0.0) + p.quantity
+            qty[p.symbol] = qty.get(p.symbol, ZERO) + p.quantity
     out = []
     for sym, q in qty.items():
         if q < 0:
             unrl = sum(r.unrealized for r in st.ru if r.symbol == sym and r.asset_class != "Forex")
-            out.append({"symbol": sym, "contracts": -q, "unrealized_eur": unrl, "loss_eur": max(-unrl, 0.0)})
+            out.append({"symbol": sym, "contracts": -q, "unrealized_eur": unrl, "loss_eur": max(-unrl, ZERO)})
     return sorted(out, key=lambda x: x["symbol"])
 
 
@@ -136,11 +137,11 @@ def classify_transfers(lines) -> list[str]:
         if "cancel" not in d and "reversal" not in d:
             continue
         cands = [j for j, y in enumerate(lines)
-                 if j != i and not kinds[j].startswith("Peru") and abs(y.amount_eur + x.amount_eur) < 0.005
+                 if j != i and not kinds[j].startswith("Peru") and abs(y.amount_eur + x.amount_eur) < D("0.005")
                  and "cancel" not in y.description.lower() and y.date <= x.date]
         if not cands:  # allow a match dated after the cancellation as a fallback
             cands = [j for j, y in enumerate(lines) if j != i and not kinds[j].startswith("Peru")
-                     and abs(y.amount_eur + x.amount_eur) < 0.005 and "cancel" not in y.description.lower()]
+                     and abs(y.amount_eur + x.amount_eur) < D("0.005") and "cancel" not in y.description.lower()]
         if cands:
             j = max(cands, key=lambda k: (lines[k].date, -abs(k - i)))
             kinds[i] = kinds[j] = "Peruttu"
@@ -180,6 +181,9 @@ def _div_country(st: Statement, div_desc: str) -> str:
 
 
 def build(st: Statement, s: Settings) -> Books:
+    from .num import decimalize
+    st.normalize()
+    decimalize(s)
     b = Books(st, s)
     v = b.v
     b.warnings += st.warnings
@@ -206,7 +210,7 @@ def build(st: Statement, s: Settings) -> Books:
     v["int_expense"] = sum(x.amount_eur for x in st.interest if x.amount_eur < 0)
     v["int_accrual_chg"] = st.nav_total("Interest Accruals", "end") - st.nav_total("Interest Accruals", "start")
     v["div_accrual_chg"] = st.nav_total("Dividend Accruals", "end") - st.nav_total("Dividend Accruals", "start")
-    v["fees"] = st.fees_total_eur or 0.0
+    v["fees"] = st.fees_total_eur or ZERO
     if s.transaction_fees_override is not None:
         v["ftt"] = -abs(s.transaction_fees_override)
     elif st.transaction_fees_eur is not None:
@@ -214,7 +218,7 @@ def build(st: Statement, s: Settings) -> Books:
     elif "Transaction Fees" in st.change_in_nav:
         v["ftt"] = st.change_in_nav["Transaction Fees"]
     else:
-        v["ftt"] = 0.0
+        v["ftt"] = ZERO
         b.warnings.append("Transaction fees (e.g. French FTT) not in this statement. If you traded FR/IT/ES "
                           "shares, enter them from the Activity Statement's 'Transaction Fees' — otherwise "
                           "they end up inside the FX line.")
@@ -242,7 +246,7 @@ def build(st: Statement, s: Settings) -> Books:
     v["unbooked_sec_end"] = sum(x.unbooked_gain for x in b.symbols if x.asset_class != "Futures")
     v["unbooked_fut_end"] = sum(x.unbooked_gain for x in b.symbols if x.asset_class == "Futures")
     v["F"] = v["T"] - (v["gains"] + v["losses"]) - (v["unrl_end"] - v["unrl_start"])
-    v["commissions"] = st.commissions_eur if st.commissions_eur is not None else st.change_in_nav.get("Commissions", 0.0)
+    v["commissions"] = st.commissions_eur if st.commissions_eur is not None else st.change_in_nav.get("Commissions", ZERO)
 
     # ---- 4. book result
     v["wd_charge"] = -(v["wd_end"] - v["wd_start"])          # negative = expense
@@ -252,10 +256,10 @@ def build(st: Statement, s: Settings) -> Books:
     # ---- 5. balance sheet (end) from NAV long/short
     nav = st.nav
     cash = nav.get("Cash")
-    v["bs_cash"] = cash.end_long if cash else 0.0
-    v["bs_margin_loan"] = cash.end_short if cash else 0.0
-    v["bs_collateral"] = nav["Collateral Value"].end_total if "Collateral Value" in nav else 0.0
-    v["bs_sru"] = nav["Securities Right To Use"].end_total if "Securities Right To Use" in nav else 0.0
+    v["bs_cash"] = cash.end_long if cash else ZERO
+    v["bs_margin_loan"] = cash.end_short if cash else ZERO
+    v["bs_collateral"] = nav["Collateral Value"].end_total if "Collateral Value" in nav else ZERO
+    v["bs_sru"] = nav["Securities Right To Use"].end_total if "Securities Right To Use" in nav else ZERO
     pos_long = sum(r.end_long for k, r in nav.items() if k not in NON_POSITION_NAV)
     pos_short = sum(r.end_short for k, r in nav.items() if k not in NON_POSITION_NAV)
     v["bs_sec_market"] = pos_long
@@ -282,51 +286,51 @@ def build(st: Statement, s: Settings) -> Books:
     # opening provision attributed to shares, except written-option losses added back last year (OPT-Y8 carry)
     v["evl_add_wd_other"] = fut_wd + etf_wd - wopt_wd
     v["evl_add_wd_shares"] = ((share_wd - (s.opening_writedowns - s.wopt_loss_carry))
-                              if s.share_category == "muu omaisuus" else 0.0)
+                              if s.share_category == "muu omaisuus" else ZERO)
     share_loss = -sum(x.realized_loss for x in b.symbols if x.is_share)
     mo_gains = sum(x.realized_profit for x in b.symbols)
     if s.share_category == "muu omaisuus":
-        v["evl8a_excess"] = max(0.0, share_loss - mo_gains)
-        headroom = max(0.0, mo_gains - share_loss)
+        v["evl8a_excess"] = max(ZERO, share_loss - mo_gains)
+        headroom = max(ZERO, mo_gains - share_loss)
         v["evl8a_use_cf"] = -min(s.evl8a_carryforward, headroom)
     else:
-        v["evl8a_excess"] = 0.0
-        v["evl8a_use_cf"] = 0.0
+        v["evl8a_excess"] = ZERO
+        v["evl8a_use_cf"] = ZERO
     _written_options_y2(b, st, s)
     v["evl_adjust"] = (v["evl_add_wht"] + v["evl_add_wd_other"] + v["evl_add_wd_shares"]
                        + v["evl8a_excess"] + v["evl8a_use_cf"] + v["evl_add_wopt"] + v["evl_ded_wopt"]
                        + v["evl_add_wd_wopt"] + v["evl_ded_wd_wopt"])
     v["taxable"] = v["book_result"] + v["evl_adjust"]
-    v["tax_gross"] = max(v["taxable"], 0.0) * s.tax_rate
+    v["tax_gross"] = max(v["taxable"], ZERO) * s.tax_rate
     # foreign tax credit: dividend WHT by country, capped at Finnish tax on that income
     # credit = min(WHT, treaty rate x gross, Finnish tax on that income); excess over treaty rate is
     # reclaimable from the source state, not creditable in Finland.
-    credit = 0.0
+    credit = ZERO
     wht_rows: list[dict] = []
-    gross_by_country: dict[str, float] = {}
+    gross_by_country: dict[str, Decimal] = {}
     for d in st.dividends:
         if not _is_pil(d.description):
             c_ = wht_country(d.description + " - " + _div_country(st, d.description), d.currency)
-            gross_by_country[c_] = gross_by_country.get(c_, 0.0) + d.amount_eur
-    wht_by_country: dict[str, float] = {}
+            gross_by_country[c_] = gross_by_country.get(c_, ZERO) + d.amount_eur
+    wht_by_country: dict[str, Decimal] = {}
     for x in st.withholding:
         if _is_div_wht(x.description):
             c_ = wht_country(x.description, x.currency)
-            wht_by_country[c_] = wht_by_country.get(c_, 0.0) - x.amount_eur
+            wht_by_country[c_] = wht_by_country.get(c_, ZERO) - x.amount_eur
     for c_, w in wht_by_country.items():
         gross = gross_by_country.get(c_, sum(d.amount_eur for d in st.dividends if not _is_pil(d.description)))
-        treaty = s.treaty_rates.get(c_, 0.15)
+        treaty = s.treaty_rates.get(c_, D("0.15"))
         cr = min(w, treaty * gross, s.tax_rate * gross)
-        reclaim = max(0.0, w - treaty * gross)
+        reclaim = max(ZERO, w - treaty * gross)
         credit += cr
         wht_rows.append({"country": c_, "type": "Osinko", "gross": gross, "wht": w,
-                         "rate": w / gross if gross else 0.0, "treaty": treaty, "credit": cr, "reclaim": reclaim})
+                         "rate": w / gross if gross else ZERO, "treaty": treaty, "credit": cr, "reclaim": reclaim})
     if v["wht_int"]:
         w = -v["wht_int"]
-        cr = min(w, v["int_income"] * s.tax_rate) if s.credit_interest_wht else 0.0
+        cr = min(w, v["int_income"] * s.tax_rate) if s.credit_interest_wht else ZERO
         credit += cr
         wht_rows.append({"country": "IE", "type": "Korko", "gross": v["int_income"], "wht": w,
-                         "rate": w / v["int_income"] if v["int_income"] else 0.0, "treaty": 0.0,
+                         "rate": w / v["int_income"] if v["int_income"] else ZERO, "treaty": ZERO,
                          "credit": cr, "reclaim": w - cr})
     b.wht_rows = wht_rows
     v["tax_credit"] = -min(credit, v["tax_gross"])
@@ -344,7 +348,7 @@ def build(st: Statement, s: Settings) -> Books:
     chk("Withholding tax", v["wht_div"] + v["wht_int"], "Withholding Tax")
     chk("Interest", v["int_income"] + v["int_expense"], "Interest")
     if "Other Fees" in c:
-        b.checks.append(("Other fees (+ sales tax)", v["fees"], c["Other Fees"] + c.get("Sales Tax", 0.0), ""))
+        b.checks.append(("Other fees (+ sales tax)", v["fees"], c["Other Fees"] + c.get("Sales Tax", ZERO), ""))
     chk("Transaction fees", v["ftt"], "Transaction Fees")
     chk("Commissions (from trades)", v["commissions"], "Commissions")
     chk("Deposits & withdrawals", v["net_deposits"], "Deposits & Withdrawals")
@@ -357,9 +361,9 @@ def build(st: Statement, s: Settings) -> Books:
     if "Ending Value" in c:
         b.checks.append(("NAV end", v["nav_end"], c["Ending Value"], ""))
     for name, ours, ibkr, _ in b.checks:
-        if abs(ours - ibkr) > 1.0:
+        if abs(ours - ibkr) > IBKR_TOL:     # IBKR rounds its own totals: one cent (owner, 13.11.2026)
             b.warnings.append(f"Check failed: {name}: ours {ours:,.2f} vs IBKR {ibkr:,.2f}")
-    if abs(v["book_result"] - v["book_result_check"]) > 0.01 or abs(v["bs_equity"] - v["eq_close_calc"]) > 0.05:
+    if abs(v["book_result"] - v["book_result_check"]) > TIE_TOL or abs(v["bs_equity"] - v["eq_close_calc"]) > TIE_TOL:
         b.warnings.append("Internal tie-out failed (book result or balance sheet) — please report")
     return b
 
@@ -419,7 +423,7 @@ def _written_options_y8(b, st: Statement, s: Settings) -> None:
     v["evl_add_wd_wopt"] = sum(r["loss_eur"] for r in rows if r["applied"] == "addback")
     v["wd_wopt_deducted"] = sum(r["loss_eur"] for r in rows if r["applied"] != "addback")
     v["evl_ded_wd_wopt"] = -abs(s.wopt_loss_carry)
-    if s.wopt_loss_carry and s.wopt_loss_carry > s.opening_writedowns + 0.005:
+    if s.wopt_loss_carry and s.wopt_loss_carry > s.opening_writedowns + D("0.005"):
         b.warnings.append("Edellisellä tilikaudella lisätyt asetettujen optioiden tappiot ovat suuremmat kuin avaavat "
                           "arvonalentumiset — avaaviin arvonalentumisiin kuuluu myös asetettujen optioiden varaus. Tarkista.")
     if missing:

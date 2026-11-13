@@ -6,10 +6,11 @@ from pathlib import Path
 from .books import Books, Settings, build
 from .excel import write_workbook
 from .model import Statement
+from .num import ZERO, InputError
 from .fx_ecb import is_ecb, parse_ecb, trim
 from .version import __version__
 
-__all__ = ["__version__", "load", "build", "write_workbook", "Settings", "Books", "Statement"]
+__all__ = ["__version__", "load", "build", "write_workbook", "Settings", "Books", "Statement", "InputError"]
 
 
 def load(paths: list[str | Path | tuple[str, bytes]]) -> Statement:
@@ -34,7 +35,7 @@ def load(paths: list[str | Path | tuple[str, bytes]]) -> Statement:
         if ext == ".csv":
             text = Path(p).read_text(encoding="utf-8-sig") if data is None else data.decode("utf-8-sig")
             if is_ecb(text):          # ECB reference rates (eurofxref-hist.csv), not a statement
-                ecb = parse_ecb(text)
+                ecb = parse_ecb(text, name)
                 continue
             stmts.append(parse_csv(text + "\n", name=name))
         elif ext == ".pdf":
@@ -74,7 +75,7 @@ def load(paths: list[str | Path | tuple[str, bytes]]) -> Statement:
         from .model import CashLine
         main.fees.append(CashLine(main.period_end, main.base_currency, "Sales Tax (ALV IBKR:n palveluista, Change in NAV)",
                                   tax, tax))
-        main.fees_total_eur = (main.fees_total_eur or 0.0) + tax
+        main.fees_total_eur = (main.fees_total_eur or ZERO) + tax
     return main
 
 
