@@ -57,6 +57,10 @@ class Settings:
     opening_unbooked_gains: float = 0.0    # unrealized gains not booked at period start
     evl8a_carryforward: float = 0.0        # prior years' unused share losses (EVL 8 a §)
     wopt_premium_carry: float = 0.0        # OPT-Y2: premiums taxed in earlier years for options closed this year (EUR)
+    # OPT-Y8: open written options at year-end — {symbol: "addback" | "deduct" | "fair_value"} (user's choice per option)
+    wopt_y8: dict = field(default_factory=dict)
+    fair_value_5_2a: bool = False          # company values trading financial instruments at fair value (KPL 5:2a)
+    wopt_loss_carry: float = 0.0           # OPT-Y8: written-option book losses added back last year (part of opening_writedowns)
     transaction_fees_override: float | None = None  # negative EUR, e.g. -2458.32
     tax_rate: float = 0.20
     credit_interest_wht: bool = False      # IE interest WHT: treaty 0 % -> reclaim from Ireland by default
@@ -94,6 +98,29 @@ class Books:
     checks: list[tuple[str, float, float, str]] = field(default_factory=list)  # (name, ours, ibkr, note)
     warnings: list[str] = field(default_factory=list)
     wht_rows: list[dict] = field(default_factory=list)
+    wopt_y8: list[dict] = field(default_factory=list)       # OPT-Y8 rows: open written options at year-end
+    preliminary: bool = False                               # a required user choice is missing
+
+
+Y8_CHOICES = {"addback": "Lisätään takaisin (OPT-Y8)",
+              "deduct": "Vähennetään kirjanpidon mukaisesti (ei lähdettä)",
+              "fair_value": "EVL 27 e § (käypä arvo, KPL 5:2a)"}
+
+
+def open_written_options(st: Statement) -> list[dict]:
+    """Option positions with a negative quantity at period end (written options still open) and their book loss:
+    the lower-of-cost write-down (KPL 5:6) from IBKR's unrealized result for the symbol."""
+    from .parse_common import OPTION_CLASSES
+    qty: dict[str, float] = {}
+    for p in st.positions:
+        if p.asset_class in OPTION_CLASSES:
+            qty[p.symbol] = qty.get(p.symbol, 0.0) + p.quantity
+    out = []
+    for sym, q in qty.items():
+        if q < 0:
+            unrl = sum(r.unrealized for r in st.ru if r.symbol == sym and r.asset_class != "Forex")
+            out.append({"symbol": sym, "contracts": -q, "unrealized_eur": unrl, "loss_eur": max(-unrl, 0.0)})
+    return sorted(out, key=lambda x: x["symbol"])
 
 
 NON_POSITION_NAV = {"Cash", "Collateral Value", "Securities Right To Use", "Interest Accruals",
@@ -250,9 +277,12 @@ def build(st: Statement, s: Settings) -> Books:
     fut_wd = sum(x.writedown for x in b.symbols if not x.is_share and x.asset_class != "Stocks")
     etf_wd = sum(x.writedown for x in b.symbols if not x.is_share and x.asset_class == "Stocks")
     share_wd = sum(x.writedown for x in b.symbols if x.is_share)
-    # opening provision attributed to shares (simplification; edit in workbook if needed)
-    v["evl_add_wd_other"] = fut_wd + etf_wd
-    v["evl_add_wd_shares"] = (share_wd - s.opening_writedowns) if s.share_category == "muu omaisuus" else 0.0
+    _written_options_y8(b, st, s)
+    wopt_wd = sum(r["loss_eur"] for r in b.wopt_y8)
+    # opening provision attributed to shares, except written-option losses added back last year (OPT-Y8 carry)
+    v["evl_add_wd_other"] = fut_wd + etf_wd - wopt_wd
+    v["evl_add_wd_shares"] = ((share_wd - (s.opening_writedowns - s.wopt_loss_carry))
+                              if s.share_category == "muu omaisuus" else 0.0)
     share_loss = -sum(x.realized_loss for x in b.symbols if x.is_share)
     mo_gains = sum(x.realized_profit for x in b.symbols)
     if s.share_category == "muu omaisuus":
@@ -264,7 +294,8 @@ def build(st: Statement, s: Settings) -> Books:
         v["evl8a_use_cf"] = 0.0
     _written_options_y2(b, st, s)
     v["evl_adjust"] = (v["evl_add_wht"] + v["evl_add_wd_other"] + v["evl_add_wd_shares"]
-                       + v["evl8a_excess"] + v["evl8a_use_cf"] + v["evl_add_wopt"] + v["evl_ded_wopt"])
+                       + v["evl8a_excess"] + v["evl8a_use_cf"] + v["evl_add_wopt"] + v["evl_ded_wopt"]
+                       + v["evl_add_wd_wopt"] + v["evl_ded_wd_wopt"])
     v["taxable"] = v["book_result"] + v["evl_adjust"]
     v["tax_gross"] = max(v["taxable"], 0.0) * s.tax_rate
     # foreign tax credit: dividend WHT by country, capped at Finnish tax on that income
@@ -364,3 +395,42 @@ def _written_options_y2(b, st: Statement, s: Settings) -> None:
         b.warnings.append("Asetettuja optioita (OTC tai yli 18 kk) avoinna tilikauden lopussa: preemiot "
                           f"{v['evl_add_wopt']:,.2f} € lisätty verotettavaan tuloon asetusvuonna (EVL 27 d § 1 mom.). "
                           "Vähennä ne sulkemisvuonna (asetus 'Aiemmin verotetut asetettujen optioiden preemiot').")
+
+
+def _written_options_y8(b, st: Statement, s: Settings) -> None:
+    """OPT-Y8 (proposal, confirm with the kirjanpitäjä — 62N-95): the year-end book loss of a written option that is
+    still open (KPL 5:6 write-down / provision) is not deductible before the option is closed, exercised or expires
+    (EVL 27 d § 2 and 4 mom.; HE 84/2002) → added back in the EVL bridge, and the amount added back is deducted the
+    next year (input `wopt_loss_carry`). Exception: fair-value accounting under KPL 5:2a → EVL 27 e §. The user chooses
+    the treatment per option; while the rule is a proposal nothing is preselected: a missing choice adds the loss back
+    (the conservative treatment) and marks the result preliminary."""
+    v = b.v
+    rows, missing = [], []
+    for o in open_written_options(st):
+        ch = s.wopt_y8.get(o["symbol"]) if isinstance(s.wopt_y8, dict) else None
+        if ch == "fair_value" and not s.fair_value_5_2a:
+            b.warnings.append(f"{o['symbol']}: EVL 27 e § valittu, mutta yhtiön ei ole ilmoitettu arvostavan "
+                              "rahoitusvälineitä käypään arvoon (KPL 5:2a) — valinta ohitettu.")
+            ch = None
+        if ch not in Y8_CHOICES and o["loss_eur"] > 0:
+            missing.append(o["symbol"])
+        rows.append(dict(o, choice=ch if ch in Y8_CHOICES else "", applied=ch if ch in Y8_CHOICES else "addback"))
+    b.wopt_y8 = rows
+    v["evl_add_wd_wopt"] = sum(r["loss_eur"] for r in rows if r["applied"] == "addback")
+    v["wd_wopt_deducted"] = sum(r["loss_eur"] for r in rows if r["applied"] != "addback")
+    v["evl_ded_wd_wopt"] = -abs(s.wopt_loss_carry)
+    if s.wopt_loss_carry and s.wopt_loss_carry > s.opening_writedowns + 0.005:
+        b.warnings.append("Edellisellä tilikaudella lisätyt asetettujen optioiden tappiot ovat suuremmat kuin avaavat "
+                          "arvonalentumiset — avaaviin arvonalentumisiin kuuluu myös asetettujen optioiden varaus. Tarkista.")
+    if missing:
+        b.preliminary = True
+        b.warnings.append("Avoimia asetettuja optioita tilikauden lopussa ilman valittua käsittelyä: "
+                          f"{', '.join(missing)}. Tappio on lisätty takaisin (OPT-Y8, ehdotus) — valitse käsittely.")
+    if any(r["applied"] == "deduct" and r["loss_eur"] > 0 for r in rows):
+        b.warnings.append("Avoimen asetetun option tilinpäätöstappio vähennetty kirjanpidon mukaisesti: tälle ei ole "
+                          "lähdettä (HE 84/2002: realisoitumaton menetys vähennyskelpoinen vain erityissäännöksellä). "
+                          "Vahvista kirjanpitäjältä.")
+    if any(r["applied"] == "fair_value" for r in rows):
+        b.warnings.append("EVL 27 e § (käypä arvo): tämän työkirjan kirjanpito noudattaa alimman arvon periaatetta "
+                          "(KPL 5:6). Käypään arvoon arvostettaessa myös realisoitumattomat arvonnousut kirjataan ja "
+                          "verotetaan — oikaise pääkirjanpidossa.")

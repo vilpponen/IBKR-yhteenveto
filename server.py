@@ -136,6 +136,8 @@ class Handler(BaseHTTPRequestHandler):
                         transaction_fees_override=-abs(ftt) if ftt else None,
                         opening_writedowns=f(o.get("wd_open")), opening_unbooked_gains=f(o.get("ug_open")),
                         evl8a_carryforward=f(o.get("cf")), wopt_premium_carry=f(o.get("wopt_cf")), credit_interest_wht=bool(o.get("int_credit")),
+                        wopt_y8={str(k): str(x) for k, x in o["wopt_y8"].items()} if isinstance(o.get("wopt_y8"), dict) else {},
+                        fair_value_5_2a=bool(o.get("fair_value_5_2a")), wopt_loss_carry=f(o.get("wopt_loss_cf")),
                         etf_symbols={x.strip() for x in str(o.get("etfs", "")).split(",") if x.strip()}))
                 res["xlsx"] = base64.b64encode(xlsx).decode()
                 res["version"] = __version__

@@ -136,11 +136,15 @@
             <div class="field"><label for="cf">Käyttämättömät osaketappiot, EVL 8 a § (EUR)</label><input id="cf" type="number" min="0" step="0.01" value="0"></div>
             <div class="field"><label for="wopt_cf">Aiemmin verotetut asetettujen optioiden preemiot (EUR)</label><input id="wopt_cf" type="number" min="0" step="0.01" value="0">
               <div class="hint">OTC- tai yli 18 kk:n asetetut optiot, jotka päättyivät tällä tilikaudella ja joiden preemio verotettiin asetusvuonna.</div></div>
+            <div class="field"><label for="wopt_loss_cf">Edellisellä tilikaudella lisätyt asetettujen optioiden tappiot (EUR)</label><input id="wopt_loss_cf" type="number" min="0" step="0.01" value="0">
+              <div class="hint">OPT-Y8: edellisen vuoden EVL-täsmäytyksessä takaisin lisätty avoimien asetettujen optioiden tilinpäätöstappio. Sisältyy avaaviin arvonalentumisiin.</div></div>
           </details>
           <details><summary>Lisäasetukset</summary>
             <div class="field"><label for="etfs">ETF/rahasto-symbolit (pilkuilla)</label><input id="etfs" type="text">
               <div class="hint">Eivät ole osakkeita EVL 8 a §:n kannalta.</div></div>
             <label class="check"><input id="int_credit_c" type="checkbox"> Hyvitä korkojen lähdevero Suomessa (oletus: haetaan takaisin lähdevaltiosta)</label>
+            <label class="check"><input id="fv52a" type="checkbox"> Yhtiö arvostaa kaupankäyntitarkoituksessa pidettävät rahoitusvälineet
+              käypään arvoon (KPL 5:2a; ei mikroyritys) — sallii EVL 27 e §:n valinnan avoimille asetetuille optioille</label>
           </details>
         </div>
 
@@ -169,6 +173,7 @@
     </div>
 
     <div id="opening" class="hidden" style="margin-top:22px"></div>
+    <div id="woptbox" class="hidden" style="margin-top:22px"></div>
 
     <div id="err1" class="note err hidden"></div>
     <div class="bar"><button id="go2" class="btn hidden">Laske silti (keskeneräinen)</button>
@@ -206,11 +211,11 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;
 // between requests; reloading the page discards it all.
 let files = [], recog = null, stmt = null, result = null;
 // Year-start positions: the user's decision per symbol (kept in page memory only, never in localStorage)
-let choices = {}, choicesKey = "";
+let choices = {}, choicesKey = "", woptCh = {};
 
 // ---------- persist settings (convenience only; never statement data)
-const FIELDS = ["name","share_cat","ftt","wd_open","ug_open","cf","wopt_cf","etfs","loss_cf","extra_regulated","fx_mode"];
-const CHECKS = ["int_credit_c","int_credit_p","include_fx","use_presumption"];
+const FIELDS = ["name","share_cat","ftt","wd_open","ug_open","cf","wopt_cf","wopt_loss_cf","etfs","loss_cf","extra_regulated","fx_mode"];
+const CHECKS = ["int_credit_c","int_credit_p","include_fx","use_presumption","fv52a"];
 function saveSettings(){ try{ const o={mode:mode()}; FIELDS.forEach(k=>o[k]=$("#"+k).value); CHECKS.forEach(k=>o[k]=$("#"+k).checked);
   localStorage.setItem("ibkr-yhteenveto", JSON.stringify(o)); }catch(e){} }
 function loadSettings(){ try{ const o=JSON.parse(localStorage.getItem("ibkr-yhteenveto")||"{}");
@@ -286,8 +291,42 @@ function resolved(sym){
   if(c.method === "olettama") return !!c.date;
   return false;
 }
+// ---------- OPT-Y8: written options still open at year-end (company)
+const woptOpen = () => (mode() === "company" && recog && recog.written_open) || [];
+const Y8 = {addback: "Lisätään takaisin verotuksessa (OPT-Y8, ehdotus)", deduct: "Vähennetään kirjanpidon mukaisesti (ei lähdettä)",
+            fair_value: "EVL 27 e § (käypä arvo, KPL 5:2a)"};
+const woptOk = o => o.loss_eur <= 0 || (woptCh[o.symbol] in Y8 && (woptCh[o.symbol] !== "fair_value" || $("#fv52a").checked));
+function renderWopt(){
+  const box = $("#woptbox"), rows = woptOpen();
+  if(!rows.length){ box.classList.add("hidden"); box.innerHTML = ""; updateGo(); return; }
+  const fv = $("#fv52a").checked;
+  const opt = (sym, v) => `<option value="${v}" ${woptCh[sym]===v?"selected":""}>${Y8[v]}</option>`;
+  const n = rows.filter(o => !woptOk(o)).length;
+  box.innerHTML = `<h2>Avoimet asetetut optiot tilinpäätöksessä</h2>
+    <div class="caption">Nämä asetetut (myydyt) optiot ovat avoinna tilikauden lopussa. Kirjanpidossa niiden tappio kirjataan
+      alimman arvon periaatteella (KPL 5:6). Verotuksessa tappio on ehdotuksen OPT-Y8 mukaan vähennyskelpoinen vasta, kun optio
+      suljetaan, toteutetaan tai raukeaa (EVL 27 d §; HE 84/2002). Sääntöä ei ole vielä vahvistettu, joten valitse käsittely
+      jokaiselle optiolle ja vahvista se kirjanpitäjältä.</div>
+    <div class="tablewrap"><table><thead><tr><th>Optio</th><th class="n">Sopimuksia</th><th class="n">Tilinpäätöstappio €</th><th>Käsittely verotuksessa</th></tr></thead><tbody>
+    ${rows.map(o => `<tr><td><b>${esc(o.symbol)}</b></td><td class="n">${eur0.format(o.contracts)}</td><td class="n">${eur.format(o.loss_eur)}</td>
+      <td>${o.loss_eur > 0 ? `<select data-w="${esc(o.symbol)}"><option value="">— valitse —</option>${opt(o.symbol,"addback")}${opt(o.symbol,"deduct")}${fv ? opt(o.symbol,"fair_value") : ""}</select>`
+        : `<span class="muted">Ei tappiota — ei valintaa</span>`}</td></tr>`).join("")}</tbody></table></div>
+    <div class="row"><span class="muted"><b>${n ? `${n} optiota odottaa valintaa.` : "Kaikki optiot käsitelty."}</b>
+      Takaisin lisätty määrä vähennetään seuraavana vuonna (asetus "Edellisellä tilikaudella lisätyt asetettujen optioiden tappiot").
+      EVL 27 e § näkyy vain, jos Lisäasetuksissa on valittu käypään arvoon arvostus (KPL 5:2a).</span></div>`;
+  box.classList.remove("hidden");
+  box.querySelectorAll("[data-w]").forEach(el => el.addEventListener("change", () => { woptCh[el.dataset.w] = el.value; renderWopt(); }));
+  updateGo();
+}
+$("#fv52a").addEventListener("change", () => { saveSettings(); renderWopt(); });
+function woptChoices(){
+  const out = {};
+  for(const o of woptOpen()) if(o.loss_eur > 0 && woptOk(o)) out[o.symbol] = woptCh[o.symbol];
+  return out;
+}
 function updateGo(){
-  const ready = files.length && stmt, open = openingLots().filter(o => !resolved(o.symbol)).length;
+  const ready = files.length && stmt,
+        open = openingLots().filter(o => !resolved(o.symbol)).length + woptOpen().filter(o => !woptOk(o)).length;
   $("#go").disabled = !ready || open > 0;
   $("#go2").classList.toggle("hidden", !ready || open === 0);
 }
@@ -376,7 +415,7 @@ async function analyze(){
     const j = await api("/api/analyze", {files: await Promise.all(files.map(async f => ({name: f.name, data: await toBase64(f)})))});
     recog = j.recognised; stmt = j.statement;
     const key = recog.account + "|" + recog.period_end;
-    if(key !== choicesKey){ choices = {}; choicesKey = key; }
+    if(key !== choicesKey){ choices = {}; woptCh = {}; choicesKey = key; }
     renderChips();
     if(!$("#name").value || (prev && prev.account !== recog.account && $("#name").value === prev.name)) $("#name").value = recog.name || "";
     renderRecog(); }
@@ -384,7 +423,7 @@ async function analyze(){
 }
 function renderRecog(){
   const box = $("#recog");
-  if(!recog){ box.classList.add("hidden"); renderOpening(); return; }
+  if(!recog){ box.classList.add("hidden"); renderOpening(); renderWopt(); return; }
   const m = mode(), r = recog;
   let warn = "";
   if(r.customer_type && r.is_corporate === (m === "personal"))
@@ -406,7 +445,7 @@ function renderRecog(){
     ${m === "personal" && r.history_periods && r.history_periods.length ? `<div class="muted">Erähistoria aiemmista raporteista: ${r.history_periods.map(esc).join(", ")}</div>` : ""}
     ${warn}`;
   box.classList.remove("hidden");
-  renderOpening();
+  renderOpening(); renderWopt();
 }
 $("#ftt").addEventListener("input", renderRecog);
 
@@ -414,7 +453,8 @@ $("#ftt").addEventListener("input", renderRecog);
 function settings(){
   const m = mode(), o = {name: $("#name").value};
   if(m === "company") Object.assign(o, {share_cat: $("#share_cat").value, ftt: $("#ftt").value, wd_open: $("#wd_open").value,
-    ug_open: $("#ug_open").value, cf: $("#cf").value, wopt_cf: $("#wopt_cf").value, etfs: $("#etfs").value, int_credit: $("#int_credit_c").checked});
+    ug_open: $("#ug_open").value, cf: $("#cf").value, wopt_cf: $("#wopt_cf").value, etfs: $("#etfs").value, int_credit: $("#int_credit_c").checked,
+    wopt_loss_cf: $("#wopt_loss_cf").value, fair_value_5_2a: $("#fv52a").checked, wopt_y8: woptChoices()});
   else Object.assign(o, {loss_cf: $("#loss_cf").value, include_fx: $("#include_fx").checked, int_credit: $("#int_credit_p").checked,
     use_presumption: $("#use_presumption").checked, extra_regulated: $("#extra_regulated").value, fx_mode: $("#fx_mode").value,
     opening_choices: openingChoices()});
@@ -465,7 +505,7 @@ function renderResult(){
   const r = result;
   $("#heading").textContent = r.heading; $("#caption").textContent = r.caption;
   $("#metrics").innerHTML = r.metrics.map(([l,v]) => `<div class="metric"><div class="l">${esc(l)}</div><div class="v">${eur0.format(v)} €</div></div>`).join("");
-  $("#okbox").innerHTML = (r.preliminary ? `<div class="note err"><b>Keskeneräinen laskelma.</b> Osalle vuoden alun positioista ei ole valittu käsittelyä — palaa asetuksiin ja valitse.</div>` : "") +
+  $("#okbox").innerHTML = (r.preliminary ? `<div class="note err"><b>Keskeneräinen laskelma.</b> ${esc(r.preliminary_text || "Osalle vuoden alun positioista ei ole valittu käsittelyä — palaa asetuksiin ja valitse.")}</div>` : "") +
     (r.ok === null ? "" : `<div class="note ${r.ok?"ok":"err"}">${esc(r.ok_text)}</div>`);
   const el = r.end_lots && r.end_lots.lots ? r.end_lots.lots : [];
   $("#dlLots").classList.toggle("hidden", !el.length);

@@ -77,7 +77,7 @@ Koodi: `ibkr_yhteenveto/books.py`. Tehtävä: 62N-87 (kesken).
 | OPT-Y5 | 18 kuukautta lasketaan asettamispäivästä toteutuspäivään, positiokohtaisesti. | Voimassa (62N-87; avoimelle positiolle asettamispäivästä erääntymispäivään) | HE 84/2002; Vero 48083 §4.2.2 |
 | OPT-Y6 | Markkinatesti on laajempi kuin henkilöillä: Yhdysvaltain pörssit kelpaavat suoraan lain sanamuodon nojalla. | Vahvistettu | EVL 27 d § 2 mom. |
 | OPT-Y7 | Pörssioptiot enintään 18 kk: verotus seuraa kirjanpitoa, eikä EVL-oikaisua tarvita, kun preemio on siirtovelkana option päättymiseen asti. | Vahvistettu | Vero 48083 §4.3 |
-| OPT-Y8 | Avoimen asetetun option tilinpäätöshetken tappio (KPL 5:2 -arvostus tai pakollinen varaus) ei ole vähennyskelpoinen ennen kuin optio suljetaan, toteutetaan tai raukeaa; se lisätään takaisin EVL-täsmäytyksessä. Poikkeus: käypään arvoon arvostettu kaupankäyntitarkoituksessa pidettävä rahoitusväline (KPL 5:2a) → EVL 27 e § ja 8 § 1 mom. 2 a k. (ei mikroyritykselle). | Ehdotus (vahvistus kirjanpitäjältä, 62N-95) | EVL 27 d § 2 ja 4 mom., 27 e §; HE 84/2002 s. 2–3 ja 8 (realisoitumaton menetys vähennyskelpoinen vain erityissäännöksellä; julkaisematon hallinto-oikeuden päätös 2000: avoimien asetettujen optioiden laskennalliset sulkemiskustannukset eivät vähennyskelpoisia, KHO ei myöntänyt valituslupaa 2001); Vero 48083 §4.3 ja liite 2; Lomake 77. KHO:n vuosikirjaratkaisua ei löytynyt vuoden 2002 jälkeen; KKO ei ratkaise veroasioita. |
+| OPT-Y8 | Avoimen asetetun option tilinpäätöshetken tappio (KPL 5:2 -arvostus tai pakollinen varaus) ei ole vähennyskelpoinen ennen kuin optio suljetaan, toteutetaan tai raukeaa; se lisätään takaisin EVL-täsmäytyksessä. Poikkeus: käypään arvoon arvostettu kaupankäyntitarkoituksessa pidettävä rahoitusväline (KPL 5:2a) → EVL 27 e § ja 8 § 1 mom. 2 a k. (ei mikroyritykselle). | Ehdotus (vahvistus kirjanpitäjältä, 62N-95). Toteutettu käyttäjän valintana optioittain (62N-100): lisätään takaisin / vähennetään kirjanpidon mukaisesti / EVL 27 e §; ei esivalintaa, ilman valintaa lisätään takaisin ja tulos on keskeneräinen. Lisätty määrä vähennetään seuraavana vuonna syötteellä. | EVL 27 d § 2 ja 4 mom., 27 e §; HE 84/2002 s. 2–3 ja 8 (realisoitumaton menetys vähennyskelpoinen vain erityissäännöksellä; julkaisematon hallinto-oikeuden päätös 2000: avoimien asetettujen optioiden laskennalliset sulkemiskustannukset eivät vähennyskelpoisia, KHO ei myöntänyt valituslupaa 2001); Vero 48083 §4.3 ja liite 2; Lomake 77. KHO:n vuosikirjaratkaisua ei löytynyt vuoden 2002 jälkeen; KKO ei ratkaise veroasioita. |
 
 ## 3. Osakeyhtiö — muut säännöt (KPL / EVL)
 
@@ -91,7 +91,7 @@ rekisteriä perustettaessa; tarkistus tehdään, kun riviin kosketaan.
 | YHT-3 | Komissiot sisältyvät jo IBKR:n hankintamenoon ja luovutushintaan; niitä ei vähennetä uudelleen. | Voimassa |
 | YHT-4 | Alin arvo (KPL 5:6): realisoitumaton tappio kirjataan arvonalennuksena (muutos avaavaan varaukseen nähden); realisoitumattomia voittoja ei kirjata. | Voimassa |
 | YHT-5 | EVL: kaikki lähdeverot lisätään takaisin; hyvitys lasketaan erikseen, enintään verosopimuksen mukainen määrä. | Voimassa |
-| YHT-6 | EVL: futuurien ja ETF:ien arvonalennukset ovat muuta omaisuutta (lisätään takaisin); osakkeet käsitellään asetuksen mukaan (muu omaisuus tai rahoitusomaisuus). | Voimassa; omaisuuslaji avoin (62N-95) |
+| YHT-6 | EVL: futuurien ja ETF:ien arvonalennukset ovat muuta omaisuutta (lisätään takaisin); osakkeet käsitellään asetuksen mukaan (muu omaisuus tai rahoitusomaisuus). Avoimien asetettujen optioiden tilinpäätöstappio käsitellään erikseen (`OPT-Y8`). | Voimassa; omaisuuslaji avoin (62N-95) |
 | YHT-7 | Listayhtiön osinko listaamattomalle yhtiölle alle 10 %:n omistuksella on kokonaan veronalaista; PIL on muuta rahoitustuottoa. | Voimassa |
 | YHT-8 | Siirrot: peruutus ja sen vastatapahtuma merkitään peruutetuiksi (netto 0); nostot menevät yhtiön omalle pankkitilille ilman verovaikutusta. | Voimassa |
 | YHT-9 | Kryptovarat ovat osakeyhtiössä muuta omaisuutta. | Voimassa |
@@ -118,6 +118,8 @@ rekisteriä perustettaessa, ellei rivillä toisin mainita.
 
 ## Muutosloki
 
+- 13.11.2026 — 62N-100 toteutettu (dev): `OPT-Y8` käyttäjän valintana optioittain (tila pysyy Ehdotus);
+  `YHT-6` tarkennettu: asetettujen optioiden tappio omalla rivillään.
 - 13.11.2026 — 62N-87 toteutettu (dev): `OPT-H1`, `OPT-H2`, `OPT-H4`…`OPT-H8`, `OPT-Y2` ja `OPT-Y5` → Voimassa;
   `HEN-12` korvattu (`OPT-H4`, `OPT-H5`).
 - 13.11.2026 — Omistajan päätökset 62N-87:ään: `OPT-H4`, `OPT-H5` (vaihtoehto A), `OPT-H6`, `OPT-H8` ja `OPT-H13`

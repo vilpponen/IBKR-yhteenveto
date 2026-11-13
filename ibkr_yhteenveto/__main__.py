@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from . import Settings, __version__, build, load, write_workbook
+from .books import open_written_options
 
 
 def main(argv=None) -> int:
@@ -28,6 +29,13 @@ def main(argv=None) -> int:
     g.add_argument("--evl8a-carryforward", type=float, default=0.0)
     g.add_argument("--wopt-premium-carry", type=float, default=0.0,
                    help="OPT-Y2: premiums of OTC/>18-month written options taxed in earlier years, closed this year")
+    g.add_argument("--wopt-y8", default=None, choices=["addback", "deduct", "fair_value"],
+                   help="OPT-Y8 (proposal): treatment of the year-end book loss of written options still open, for all "
+                        "of them (addback = add back in EVL, deduct = follow the books, fair_value = EVL 27 e §)")
+    g.add_argument("--fair-value-5-2a", action="store_true",
+                   help="the company values trading financial instruments at fair value (KPL 5:2a); needed for fair_value")
+    g.add_argument("--wopt-loss-carry", type=float, default=0.0,
+                   help="OPT-Y8: written-option book losses added back last year (part of --opening-writedowns)")
     g.add_argument("--etf", default="", help="comma-separated symbols that are ETFs/funds (not shares)")
     p = ap.add_argument_group("personal mode")
     p.add_argument("--personal", action="store_true", help="individual: OmaVero capital income instead of company books")
@@ -48,6 +56,8 @@ def main(argv=None) -> int:
                  transaction_fees_override=a.ftt, opening_writedowns=a.opening_writedowns,
                  opening_unbooked_gains=a.opening_unbooked_gains, evl8a_carryforward=a.evl8a_carryforward,
                  wopt_premium_carry=a.wopt_premium_carry,
+                 wopt_y8={o["symbol"]: a.wopt_y8 for o in open_written_options(st)} if a.wopt_y8 else {},
+                 fair_value_5_2a=a.fair_value_5_2a, wopt_loss_carry=a.wopt_loss_carry,
                  etf_symbols={x.strip() for x in a.etf.split(",") if x.strip()})
     b = build(st, s)
     out = Path(a.out or f"{st.account}_{st.period_end[:4]}_tilinpaatos.xlsx")
@@ -60,7 +70,9 @@ def main(argv=None) -> int:
     for w in b.warnings:
         print("  ! " + w, file=sys.stderr)
     print(f"-> {out}")
-    return 0
+    if b.preliminary:
+        print("  ! KESKENERÄINEN: avoimille asetetuille optioille ei ole valittu käsittelyä (--wopt-y8).", file=sys.stderr)
+    return 2 if b.preliminary else 0
 
 
 def _personal(a, st) -> int:

@@ -133,7 +133,9 @@ Yksityishenkilö (aiempien vuosien raportit voi antaa samassa komennossa erähis
 ```
 
 Vuoden alun erät voi antaa web-sovelluksesta viedyllä JSON-tiedostolla (`--opening-lots erat.json`). Jos jokin erä
-jää ratkaisematta, komento kertoo sen ja palauttaa koodin 2 (tulos keskeneräinen). Kaikki valinnat: `--help`.
+jää ratkaisematta, komento kertoo sen ja palauttaa koodin 2 (tulos keskeneräinen). Osakeyhtiössä sama koskee
+tilikauden lopussa avoimia asetettuja optioita: käsittely annetaan valinnalla `--wopt-y8 addback|deduct|fair_value`.
+Kaikki valinnat: `--help`.
 
 ## Mitkä raportit IBKR:stä
 
@@ -173,6 +175,10 @@ kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä rapor
 * **Tase** IBKR:n NAV-riveistä, tilikartta debet = kredit, täsmäytys NAV:iin sentilleen.
 * **EVL-täsmäytys (6B):** lähdeverot lisätään takaisin ja hyvitetään sopimusrajaan asti; *muun omaisuuden*
   arvonalentumiset lisätään takaisin; EVL 8 a §:n osaketappiorajoitus; omaisuuslaji valittavissa.
+* **Asetetut optiot:** OTC- ja yli 18 kuukauden optioiden preemio verotetaan asetusvuonna. Tilikauden lopussa
+  avoinna olevan asetetun option kirjanpidon tappiolle valitaan käsittely optioittain (oletusehdotus: lisätään
+  takaisin ja vähennetään seuraavana vuonna). Ennen valintaa tulos on keskeneräinen. Perusteet:
+  [päätösrekisteri](docs/PAATOSREKISTERI.md) (OPT-Y8 on ehdotus — vahvista kirjanpitäjältä).
 * **Siirrot:** talletukset/nostot yhtiön pankkitilin ja IBKR:n välillä (tili 1900); perutut nostot nettoutuvat.
 
 ## Yksityishenkilö

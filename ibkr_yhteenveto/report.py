@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from .books import Books, Settings, build, classify_transfers
+from .books import Y8_CHOICES, Books, Settings, build, classify_transfers, open_written_options
 from .excel import write_workbook
 from .excel_personal import write_personal_workbook
 from .model import Statement
@@ -41,6 +41,8 @@ def recognised(st: Statement) -> dict:
         "history_periods": list(st.history_periods),
         # year-start positions consumed this period that need the user's decision (personal mode)
         "opening_lots": opening_lots(st),
+        # written options open at period end that need the user's OPT-Y8 choice (company mode)
+        "written_open": open_written_options(st),
         "warnings": list(st.warnings),
     }
 
@@ -62,6 +64,9 @@ def company(st: Statement, s: Settings) -> tuple[dict, bytes]:
             ["Valuuttakurssiero (johdettu)", v["F"]],
         ],
         "ok": ok,
+        "preliminary": b.preliminary,
+        "preliminary_text": "Osalle avoimista asetetuista optioista ei ole valittu käsittelyä (OPT-Y8) — tappio on "
+                            "lisätty takaisin oletuksena. Palaa asetuksiin ja valitse.",
         "ok_text": "Täsmäytys OK: tulos täsmää NAV-muutokseen ja tase IBKR:n NAV:iin." if ok else "Täsmäytys ei mene läpi.",
         "warnings": b.warnings,
         "download_label": "Lataa Excel-työkirja",
@@ -79,6 +84,8 @@ def company(st: Statement, s: Settings) -> tuple[dict, bytes]:
                 ["Kirjanpidon tulos", v["book_result"]], ["+ Lähdeverot", v["evl_add_wht"]],
                 ["+ Arvonalentumiset futuurit/ETF", v["evl_add_wd_other"]],
                 ["+ Arvonalentumiset osakkeet", v["evl_add_wd_shares"]],
+                ["+ OPT-Y8: avoimien asetettujen optioiden tilinpäätöstappio", v["evl_add_wd_wopt"]],
+                ["− OPT-Y8: edellisellä tilikaudella lisätyt tappiot", v["evl_ded_wd_wopt"]],
                 ["+ EVL 8 a § ylitys", v["evl8a_excess"]], ["− Tappioiden käyttö", v["evl8a_use_cf"]],
                 ["+ Asetettujen optioiden preemiot (OTC / yli 18 kk)", v["evl_add_wopt"]],
                 ["− Aiemmin verotetut asetettujen optioiden preemiot", v["evl_ded_wopt"]],
@@ -97,6 +104,13 @@ def company(st: Statement, s: Settings) -> tuple[dict, bytes]:
                   f"IBKR R&U Forex (ei kirjata): {_fi(v['ru_forex_realized'] + v['ru_forex_unrealized'])} € · "
                   f"provisiot (sisältyvät hankintamenoihin): {_fi(v['commissions'])} €"],
     }
+    if b.wopt_y8:
+        res["tabs"]["Asetetut optiot (OPT-Y8)"] = _t(
+            ["Optio", "Sopimuksia", "Realisoitumaton", "Tilinpäätöstappio", "Käsittely"],
+            [[w["symbol"], w["contracts"], w["unrealized_eur"], w["loss_eur"],
+              Y8_CHOICES[w["applied"]] + ("" if w["choice"] else " — oletus, ei valittu")] for w in b.wopt_y8], [2, 3])
+        res["notes"].append(f"Seuraavan tilikauden asetukseen 'Edellisellä tilikaudella lisätyt asetettujen optioiden "
+                            f"tappiot': {_fi(v['evl_add_wd_wopt'])} € (OPT-Y8, ehdotus — vahvista kirjanpitäjältä).")
     if not b.checks:
         res["notes"].append("Ei Change in NAV -osiota (Realized Summary). Activity Statement CSV antaa IBKR-tarkistukset.")
     return res, write_workbook(b)

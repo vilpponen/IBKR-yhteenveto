@@ -36,6 +36,12 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
   Toteutusvelvoite samana vuonna: preemio osakkeiden hintaan; aiempana vuonna asetettu: ei oikaisua. Osakeyhtiö:
   OTC- ja yli 18 kuukauden asetettujen optioiden preemio verotetaan asetusvuonna (EVL 27 d § 1 mom.) ja vähennetään
   sulkemisvuonna. Käsittelyperusteet: `docs/PAATOSREKISTERI.md`.
+- Osakeyhtiö: **avoimet asetetut optiot tilinpäätöksessä** (OPT-Y8, ehdotus). Tilikauden lopussa avoinna olevan
+  asetetun option kirjanpidon tappio näytetään omana vaiheenaan, ja käsittely valitaan optioittain: lisätään takaisin
+  verotuksessa, vähennetään kirjanpidon mukaisesti tai EVL 27 e § (vain käypään arvoon arvostavalle yhtiölle).
+  Ilman valintaa tappio lisätään takaisin ja tulos merkitään keskeneräiseksi. Tappio on EVL-täsmäytyksessä omalla
+  rivillään (ei enää futuurien ja ETF:ien rivillä), ja edellisenä vuonna lisätty määrä vähennetään uudella syötteellä.
+  Komentorivi: `--wopt-y8`, `--fair-value-5-2a`, `--wopt-loss-carry`.
 - **Päätösrekisteri** ([docs/PAATOSREKISTERI.md](docs/PAATOSREKISTERI.md)): käsittelysäännöt, niiden lähteet ja tila
   yhdessä tiedostossa. Ei muuta laskentaa.
 

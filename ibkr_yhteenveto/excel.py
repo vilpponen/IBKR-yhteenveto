@@ -13,6 +13,10 @@ from .xlsx_mem import workbook_bytes
 
 from .books import Books, _is_div_wht, _is_pil, classify_transfers, wht_country
 from .parse_common import CFD_CLASSES
+
+Y8_LABELS = {"addback": "Asetettu optio: lisätään takaisin (OPT-Y8)",
+             "deduct": "Asetettu optio: vähennetään (kirjanpito; ei lähdettä)",
+             "fair_value": "Asetettu optio: EVL 27 e § (käypä arvo)"}
 from .version import __version__
 
 FONT = "Arial"
@@ -147,6 +151,9 @@ def write_workbook(b: Books) -> bytes:
     inp("Aiemmin verotetut asetettujen optioiden preemiot (€)", s.wopt_premium_carry,
         "OPT-Y2: OTC- tai yli 18 kk:n asetetut optiot, jotka suljettiin, toteutettiin tai raukesivat tällä tilikaudella "
         "ja joiden preemio verotettiin asetusvuonna — vähennetään nyt.", "wopt_cf")
+    inp("Edellisellä tilikaudella lisätyt asetettujen optioiden tappiot (€)", s.wopt_loss_carry,
+        "OPT-Y8: edellisen vuoden EVL-täsmäytyksessä takaisin lisätty avoimien asetettujen optioiden tilinpäätöstappio "
+        "(sisältyy avaaviin arvonalentumisiin) — vähennetään nyt.", "wopt_loss_cf")
     inp("Hyvitetäänkö korkojen lähdevero Suomessa?", "Kyllä" if s.credit_interest_wht else "Ei",
         "Oletus Ei: FI–IE-sopimus → korko verotetaan vain Suomessa; Irlannin 20 % palautetaan (Form 8-3-6).",
         "intcredit", validation='"Kyllä,Ei"')
@@ -188,13 +195,24 @@ def write_workbook(b: Books) -> bytes:
     rp.header(["Omaisuusluokka", "Symboli", "Voitot", "Tappiot", "Realisoitu netto", "Realisoitumaton",
                "Osake (EVL 8 a)", "Arvonalentuminen", "Kirjaamaton arvonnousu", "Huom."])
     r0 = rp.r
+    y8 = {w["symbol"]: w for w in b.wopt_y8}
+    y8_cells = []
     for x in b.symbols:
         r = rp.r
+        w = y8.get(x.symbol) if x.asset_class != "Stocks" else None
+        huom = (Y8_LABELS[w["applied"]] if w else
+                "ETF/rahasto – ei EVL 8 a" if (x.asset_class == "Stocks" and not x.is_share) else "")
         rp.row([x.asset_class, x.symbol, x.realized_profit, x.realized_loss, f"=C{r}+D{r}", x.unrealized,
-                "Kyllä" if x.is_share else "Ei", f"=MAX(-F{r},0)", f"=MAX(F{r},0)",
-                "ETF/rahasto – ei EVL 8 a" if (x.asset_class == "Stocks" and not x.is_share) else ""],
-               ["t", "t", "in", "in", "f", "in", "in", "f", "f", "t"])
+                "Kyllä" if x.is_share else "Ei", f"=MAX(-F{r},0)", f"=MAX(F{r},0)", huom],
+               ["t", "t", "in", "in", "f", "in", "in", "f", "f", "in" if w else "t"])
+        if w:
+            y8_cells.append(f"J{r}")
     r1 = max(rp.r - 1, r0)
+    if y8_cells:
+        dvy = DataValidation(type="list", formula1='"' + ",".join(Y8_LABELS.values()) + '"', allow_blank=False)
+        rp.ws.add_data_validation(dvy)
+        for c_ in y8_cells:
+            dvy.add(c_)
     dvs = DataValidation(type="list", formula1='"Kyllä,Ei"')
     rp.ws.add_data_validation(dvs)
     dvs.add(f"G{r0}:G{r1}")
@@ -209,7 +227,12 @@ def write_workbook(b: Books) -> bytes:
     rt3 = rp.row(["  josta futuurit", None, None, None, None, None, None,
                   f'=SUMIF(A{r0}:A{r1},"Futures",H{r0}:H{r1})', f'=SUMIF(A{r0}:A{r1},"Futures",I{r0}:I{r1})'])
     ref.update(fut_ug=rp.q(f"I{rt3}"))
-    ref["other_wd"] = f"({ref['wd']}-{ref['share_wd']})"
+    rt4 = rp.row(["  josta avoimet asetetut optiot (OPT-Y8)", None, None, None, None, None, None,
+                  f'=SUMIF(J{r0}:J{r1},"Asetettu optio:*",H{r0}:H{r1})'])
+    rt5 = rp.row(["    joista lisätään takaisin verotuksessa", None, None, None, None, None, None,
+                  f'=SUMIF(J{r0}:J{r1},"{Y8_LABELS["addback"]}",H{r0}:H{r1})'])
+    ref.update(wopt_wd=rp.q(f"H{rt4}"), wopt_add=rp.q(f"H{rt5}"))
+    ref["other_wd"] = f"({ref['wd']}-{ref['share_wd']}-{ref['wopt_wd']})"
     rp.blank()
     rp.section("MUISTIO — IBKR:n Forex-rivi (EI kirjata: sisältyy jo EUR-määräisiin osake-/futuuritulokseen)", 10)
     for r in [x for x in st.ru if x.asset_class == "Forex"]:
@@ -507,8 +530,14 @@ def write_workbook(b: Books) -> bytes:
          "Vero ei ole vähennyskelpoinen kulu; hyvitys erikseen (laki kansainvälisen kaksinkertaisen verotuksen poistamisesta)")
     erow("+ Arvonalentumiset: futuurit / ETF:t (muu omaisuus)", f"={ref['other_wd']}",
          "Futuurit ja ETF:t ovat muuta omaisuutta (EVL 12 a §) — hankintameno vähennetään luovutettaessa")
-    erow("+ Arvonalentumiset: osakkeet", f'=IF({ref["cat"]}="muu omaisuus",{ref["share_wd"]}-{ref["wd_open"]},0)',
-         "Vain jos osakkeet = muu omaisuus. Rahoitusomaisuutena käsittely kirjanpitäjän kanssa.")
+    erow("+ Arvonalentumiset: osakkeet",
+         f'=IF({ref["cat"]}="muu omaisuus",{ref["share_wd"]}-({ref["wd_open"]}-{ref["wopt_loss_cf"]}),0)',
+         "Vain jos osakkeet = muu omaisuus. Rahoitusomaisuutena käsittely kirjanpitäjän kanssa. Avaavista "
+         "arvonalentumisista vähennetään asetettujen optioiden osuus (OPT-Y8, oma rivi).")
+    erow("+ OPT-Y8: avoimien asetettujen optioiden tilinpäätöstappio", f"={ref['wopt_add']}",
+         "Ehdotus, vahvista kirjanpitäjältä: ei vähennyskelpoinen ennen sulkemista, toteutusta tai raukeamista "
+         "(EVL 27 d § 2 ja 4 mom.; HE 84/2002). Käsittely optioittain: Realisoitu P_L, sarake Huom.", "link")
+    erow("− OPT-Y8: edellisellä tilikaudella lisätyt asetettujen optioiden tappiot", f"=-{ref['wopt_loss_cf']}", "Asetukset")
     erow("+ EVL 8 a §: vähennyskelvoton osaketappio", f'=IF({ref["cat"]}="muu omaisuus",MAX(0,-{ref["share_losses"]}-{ref["gains"]}),0)',
          "Osakkeiden luovutustappiot vähennetään vain muun omaisuuden luovutusvoitoista (vuosi + 5 v)")
     erow("+ Asetettujen optioiden preemiot, OTC / yli 18 kk, avoinna (OPT-Y2)", round(b.v.get("evl_add_wopt", 0.0), 2),
@@ -597,6 +626,16 @@ def write_workbook(b: Books) -> bytes:
         notes.append(("9. CFD:t", "CFD-kauppojen voitot ja tappiot on käsitelty kuten muut johdannaiset (veronalaisia / "
                       "vähennyskelpoisia). Verohallinnon EVL-johdannaisohje (2014) ei käsittele CFD:itä — vahvista "
                       "käsittely kirjanpitäjän kanssa. Henkilöverotuksessa CFD-tappiot eivät ole vähennyskelpoisia."))
+    if b.wopt_y8:
+        notes.append((f"{len(notes) + 1}. Avoimet asetetut optiot (OPT-Y8)",
+                      "Tilikauden lopussa avoinna olevan asetetun option kirjanpidon tappio (KPL 5:6 / varaus) lisätään "
+                      "takaisin verotuksessa ja vähennetään seuraavana vuonna, kun optio suljetaan, toteutetaan tai "
+                      "raukeaa. Sääntö on EHDOTUS (päätösrekisteri OPT-Y8) — vahvista kirjanpitäjältä. Lähteet: "
+                      "EVL 27 d § 2 ja 4 mom., 27 e §; HE 84/2002; Verohallinnon ohje 48083 (13.6.2014) kohta 4.3. "
+                      "Valinnat: " + "; ".join(f"{w['symbol']}: {Y8_LABELS[w['applied']]}"
+                                             + ("" if w["choice"] else " (ei valittu — oletus)") for w in b.wopt_y8)
+                      + f". Siirrä seuraavan vuoden asetukseen 'lisätyt asetettujen optioiden tappiot': "
+                      f"{v['evl_add_wd_wopt']:,.2f} €."))
     for k, t_ in notes:
         r = muis.row([k, t_], ["t", "t"])
         muis.ws.cell(r, 2).alignment = Alignment(wrap_text=True, vertical="top")
