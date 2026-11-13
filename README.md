@@ -26,8 +26,8 @@ palvelimella muiden käyttöön; silloin sivu kertoo käyttäjälle, että rapor
 
 > ℹ️ **Kenelle työkalu sopii nyt.** Työkalu on tällä hetkellä tehty ensisijaisesti **aktiiviselle kaupankävijälle,
 > jonka salkku on vuoden alussa tyhjä** (positiot avataan ja suljetaan saman vuoden aikana). Aiempina vuosina
-> ostetuille erille sovellus kysyy käsittelytavan ([Vuoden alun positiot](#vuoden-alun-positiot)). Asetetut optiot
-> (toteutusvelvoite, vuodenvaihde), yritystapahtumat (esim. splitit) ja kryptot ovat vielä rajallisesti tuettuja —
+> ostetuille erille sovellus kysyy käsittelytavan ([Vuoden alun positiot](#vuoden-alun-positiot)). Harvinaisemmat
+> yritystapahtumat (esim. spinoffit, yritysostot) ovat vielä rajallisesti tuettuja —
 > laskelma varoittaa niistä. Työkalua kehitetään palautteen perusteella
 > ([Palaute](#palaute)).
 
@@ -120,9 +120,22 @@ Päivitys: `git pull`.
 
 ### Komentorivi ilman selainta
 
+Osakeyhtiö:
+
 ```bash
-.venv/bin/python -m ibkr_yhteenveto raportti.csv raportti.pdf -o tulos.xlsx
+.venv/bin/python -m ibkr_yhteenveto raportti.csv -o tilinpaatos.xlsx --opening-writedowns 0
 ```
+
+Yksityishenkilö (aiempien vuosien raportit voi antaa samassa komennossa erähistoriaksi):
+
+```bash
+.venv/bin/python -m ibkr_yhteenveto raportti.csv raportti.pdf edellinen_vuosi.csv --personal -o omavero.xlsx
+```
+
+Vuoden alun erät voi antaa web-sovelluksesta viedyllä JSON-tiedostolla (`--opening-lots erat.json`). Jos jokin erä
+jää ratkaisematta, komento kertoo sen ja palauttaa koodin 2 (tulos keskeneräinen). Osakeyhtiössä sama koskee
+tilikauden lopussa avoimia asetettuja optioita: käsittely annetaan valinnalla `--wopt-y8 addback|deduct|fair_value`.
+Kaikki valinnat: `--help`.
 
 ## Mitkä raportit IBKR:stä
 
@@ -133,6 +146,11 @@ Päivitys: `git pull`.
 |---|---|---|---|
 | **Osakeyhtiö** | Activity Statement **CSV** | CSV (PDF ei muuta tulosta) | CSV:ssä on kaikki: NAV, Change in NAV -tarkistukset, R&U-tulokset, positiot, rahaliikenne ja transaktioverot (FTT) |
 | **Yksityishenkilö** | Activity Statement **CSV** | **CSV + PDF** | Verohallinnon tapa vaatii jokaiselle kaupalle EUR-määrän kauppapäivän kurssilla. Ne ovat vain PDF:n *Forex P/L Details* -osiossa. Pelkällä CSV:llä valuuttamääräiset kaupat muunnetaan keskikurssilla (työkalu varoittaa) — testiaineistossa pääomatulo oli noin 3 % liian suuri. Jos kaikki kaupat ovat euroissa, CSV riittää. |
+
+**EKP-kurssit (valinnainen, yksityishenkilö):** lisää EKP:n kurssihistoria `eurofxref-hist.csv`
+([ecb.europa.eu](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html))
+latauslaatikkoon ja valitse asetuksista *EKP:n viitekurssi selvityspäivältä*. Oletuksena käytetään IBKR:n
+kauppakohtaisia EUR-määriä.
 
 **Aiempina vuosina ostetut osakkeet (yksityishenkilö):** lisää samaan latauslaatikkoon myös edellisten vuosien
 Activity Statementit (CSV + PDF). Uusin kausi lasketaan, ja aiemmista luetaan ostoerät EUR-määrineen.
@@ -157,19 +175,32 @@ kauppakohtaiset EUR-määrät). Sovellus näyttää ennen laskentaa, mitä rapor
 * **Tase** IBKR:n NAV-riveistä, tilikartta debet = kredit, täsmäytys NAV:iin sentilleen.
 * **EVL-täsmäytys (6B):** lähdeverot lisätään takaisin ja hyvitetään sopimusrajaan asti; *muun omaisuuden*
   arvonalentumiset lisätään takaisin; EVL 8 a §:n osaketappiorajoitus; omaisuuslaji valittavissa.
+* **Asetetut optiot:** OTC- ja yli 18 kuukauden optioiden preemio verotetaan asetusvuonna. Tilikauden lopussa
+  avoinna olevan asetetun option kirjanpidon tappiolle valitaan käsittely optioittain (oletusehdotus: lisätään
+  takaisin ja vähennetään seuraavana vuonna). Ennen valintaa tulos on keskeneräinen. Perusteet:
+  [päätösrekisteri](docs/PAATOSREKISTERI.md) (OPT-Y8 on ehdotus — vahvista kirjanpitäjältä).
 * **Siirrot:** talletukset/nostot yhtiön pankkitilin ja IBKR:n välillä (tili 1900); perutut nostot nettoutuvat.
 
 ## Yksityishenkilö
 
 * **Arvopaperit (9A):** FIFO hankintaerittäin IBKR:n kauppakohtaisista EUR-määristä — myyntihinta myyntipäivän ja
   hankintameno ostopäivän kurssilla (Verohallinnon tapa). Luovutushinnat, hankintamenot, voitot ja tappiot.
-* **Johdannaiset** (futuurit, optiot): voitot ja tappiot.
+* **Johdannaiset** (futuurit, optiot): voitot ja tappiot. Tappiot vähennetään vain säännellyiltä tai niihin
+  rinnastettavilta markkinoilta (oletuksena ETA:n ja Yhdysvaltain pörssit; markkinapaikka CSV:stä).
+* **Asetetut optiot:** preemio verotetaan asetusvuonna; vuodenvaihteen yli menevät positiot ja toteutusvelvoitteet
+  käsitellään [päätösrekisterin](docs/PAATOSREKISTERI.md) mukaan.
 * **Optioiden toteutus:** ostetun osto-option preemio lisätään saatujen osakkeiden hankintamenoon ja ostetun
   myyntioption preemio vähennetään osakkeiden luovutushinnasta (KHO 2012:69). Tarvitsee Activity Statement CSV:n.
 * **CFD:t:** voitot kauppakohtaisesti muuna pääomatulona; tappiot eivät ole vähennyskelpoisia, joten niitä ei
   huomioida (Verohallinto). Kauppakohtainen erittely tarvitsee Activity Statement CSV:n.
 * **Ulkomaan pääomatulot (16B):** osingot (85 % veronalaista), lähdeveron hyvitys sopimusrajaan asti, korot.
 * **Vähennykset:** marginaalilainan korot, IBKR-kulut, aiempien vuosien vahvistetut tappiot.
+* **Kryptovarat** (CSV): FIFO kolikoittain, hankintameno-olettama, oma kohta OmaVerossa; 1 000 euron raja
+  yhdessä arvopapereiden kanssa.
+* **Yritystapahtumat:** split, yhdistely ja osake- tai rahastoanti (CSV:stä); tuntematon tapahtuma keskeyttää
+  kyseisen osakkeen laskennan ja merkitsee tuloksen keskeneräiseksi.
+* **Hankintameno-olettama** erittäin: 20 % (40 %, jos omistettu vähintään 10 vuotta) bruttomyyntihinnasta, kun se
+  antaa pienemmän voiton kuin todelliset kulut; ei koskaan synnytä tappiota. Voi kytkeä pois asetuksista.
 * **Pienten luovutusten verovapaus** (luovutushinnat ≤ 1 000 €), pääomatulovero 30 % / 34 % (> 30 000 €).
 * **Vuoden alun positiot:** katso alta.
 
@@ -212,8 +243,9 @@ noussut työkirjan laskemisen jälkeen, laskentaan on tullut muutoksia — laske
 eivät koskaan muuta lukuja.
 
 <!-- muutokset:alku -->
+* **2026-11-13** — 0.10.0 Hankintameno-olettama, kryptovarat ja asetetut optiot
 * **2026-11-08** — 0.9.0 Versionumero · 0.8.0 Vuoden alun positiot ja toteutetut optiot · 0.7.0 CFD-korjaus ja README-sisällysluettelo
-* **2026-11-07** — 0.6.0 Palautekanavat · 0.5.0 Demo ja ohjeet
+* **2026-11-07** — 0.6.0 Palautekanavat
 
 Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).
 <!-- muutokset:loppu -->
@@ -241,4 +273,4 @@ Rakenne: `ibkr_yhteenveto/` (parserit, laskenta, Excel), `server.py` (paikalline
 Local tool that turns Interactive Brokers statements (PDF/CSV) into Finnish tax figures: bookkeeping (KPL) and
 the EVL tax bridge for a Finnish limited company, or OmaVero capital-income figures for an individual (FIFO at
 trade-date EUR rates). Runs on `127.0.0.1` with Python's standard-library HTTP server; nothing leaves your machine.
-Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Versioning: MINOR bumps whenever calculated figures can change, PATCH never changes figures. Currently aimed mainly at active traders who start the year with an empty portfolio (earlier-year lots are handled by asking the user per lot or by reading previous years' statements; exercised bought options adjust the shares' cost or sale price; written options, corporate actions and crypto are only partly supported yet); it will be improved based on feedback. Not tax advice. MIT licence.
+Try it in the browser at [ibkr.arxsavonum.com](https://ibkr.arxsavonum.com) — statements are processed in memory only and nothing is stored on the server. `./run.sh` to run it locally. Feedback: [GitHub Issues](https://github.com/vilpponen/IBKR-yhteenveto/issues) or info@arxsavonum.com (never attach real statements). Versioning: MINOR bumps whenever calculated figures can change, PATCH never changes figures. Currently aimed mainly at active traders who start the year with an empty portfolio (earlier-year lots are handled by asking the user per lot or by reading previous years' statements; exercised bought options adjust the shares' cost or sale price; splits and stock dividends are applied; crypto is FIFO per coin; written options follow the decision register (docs/PAATOSREKISTERI.md); rarer corporate actions are only partly supported yet); it will be improved based on feedback. Not tax advice. MIT licence.

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from .books import Books, Settings, build, classify_transfers
+from .books import Y8_CHOICES, Books, Settings, build, classify_transfers, open_written_options
 from .excel import write_workbook
 from .excel_personal import write_personal_workbook
 from .model import Statement
@@ -30,6 +30,7 @@ def recognised(st: Statement) -> dict:
         "Transaktioverot (FTT)": st.transaction_fees_eur is not None or "Transaction Fees" in st.change_in_nav,
         "Change in NAV -tarkistukset": "Mark-to-Market" in st.change_in_nav,
         "Kauppakohtaiset EUR-määrät": bool(st.stock_legs) and all(x.get("exact") for x in st.stock_legs),
+        "EKP-kurssit (valinnainen)": bool(st.ecb_rates),
     }
     return {
         "title": st.title, "name": st.name, "account": st.account, "customer_type": st.customer_type,
@@ -40,6 +41,8 @@ def recognised(st: Statement) -> dict:
         "history_periods": list(st.history_periods),
         # year-start positions consumed this period that need the user's decision (personal mode)
         "opening_lots": opening_lots(st),
+        # written options open at period end that need the user's OPT-Y8 choice (company mode)
+        "written_open": open_written_options(st),
         "warnings": list(st.warnings),
     }
 
@@ -61,6 +64,9 @@ def company(st: Statement, s: Settings) -> tuple[dict, bytes]:
             ["Valuuttakurssiero (johdettu)", v["F"]],
         ],
         "ok": ok,
+        "preliminary": b.preliminary,
+        "preliminary_text": "Osalle avoimista asetetuista optioista ei ole valittu käsittelyä (OPT-Y8) — tappio on "
+                            "lisätty takaisin oletuksena. Palaa asetuksiin ja valitse.",
         "ok_text": "Täsmäytys OK: tulos täsmää NAV-muutokseen ja tase IBKR:n NAV:iin." if ok else "Täsmäytys ei mene läpi.",
         "warnings": b.warnings,
         "download_label": "Lataa Excel-työkirja",
@@ -78,7 +84,11 @@ def company(st: Statement, s: Settings) -> tuple[dict, bytes]:
                 ["Kirjanpidon tulos", v["book_result"]], ["+ Lähdeverot", v["evl_add_wht"]],
                 ["+ Arvonalentumiset futuurit/ETF", v["evl_add_wd_other"]],
                 ["+ Arvonalentumiset osakkeet", v["evl_add_wd_shares"]],
+                ["+ OPT-Y8: avoimien asetettujen optioiden tilinpäätöstappio", v["evl_add_wd_wopt"]],
+                ["− OPT-Y8: edellisellä tilikaudella lisätyt tappiot", v["evl_ded_wd_wopt"]],
                 ["+ EVL 8 a § ylitys", v["evl8a_excess"]], ["− Tappioiden käyttö", v["evl8a_use_cf"]],
+                ["+ Asetettujen optioiden preemiot (OTC / yli 18 kk)", v["evl_add_wopt"]],
+                ["− Aiemmin verotetut asetettujen optioiden preemiot", v["evl_ded_wopt"]],
                 ["VEROTETTAVA TULO", v["taxable"]], ["Yhteisövero", v["tax_gross"]],
                 ["− Hyvitys", v["tax_credit"]], ["MAKSETTAVA", v["tax_net"]]], [1]),
             "Siirrot": _t(["Päivä", "Kuvaus", "Tyyppi", "EUR"],
@@ -94,6 +104,13 @@ def company(st: Statement, s: Settings) -> tuple[dict, bytes]:
                   f"IBKR R&U Forex (ei kirjata): {_fi(v['ru_forex_realized'] + v['ru_forex_unrealized'])} € · "
                   f"provisiot (sisältyvät hankintamenoihin): {_fi(v['commissions'])} €"],
     }
+    if b.wopt_y8:
+        res["tabs"]["Asetetut optiot (OPT-Y8)"] = _t(
+            ["Optio", "Sopimuksia", "Realisoitumaton", "Tilinpäätöstappio", "Käsittely"],
+            [[w["symbol"], w["contracts"], w["unrealized_eur"], w["loss_eur"],
+              Y8_CHOICES[w["applied"]] + ("" if w["choice"] else " — oletus, ei valittu")] for w in b.wopt_y8], [2, 3])
+        res["notes"].append(f"Seuraavan tilikauden asetukseen 'Edellisellä tilikaudella lisätyt asetettujen optioiden "
+                            f"tappiot': {_fi(v['evl_add_wd_wopt'])} € (OPT-Y8, ehdotus — vahvista kirjanpitäjältä).")
     if not b.checks:
         res["notes"].append("Ei Change in NAV -osiota (Realized Summary). Activity Statement CSV antaa IBKR-tarkistukset.")
     return res, write_workbook(b)
@@ -110,7 +127,7 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
     for m in pb.matches:
         a = agg[m.symbol]
         a[0] += m.proceeds
-        a[1] += m.cost
+        a[1] += m.proceeds - m.result      # deduction used (actual costs or olettama)
         a[2 if m.result > 0 else 3] += m.result
     warnings = list(pb.warnings)
     if v["small_exempt"]:
@@ -120,8 +137,8 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
         "heading": f"{s.name or st.name} · {st.account} · {st.period_start} – {st.period_end} · henkilöverotus",
         "caption": f"Lähteet: {', '.join(st.source_files)} · FIFO-osumia {_fi(len(pb.matches), 0)}",
         "metrics": [
-            ["Luovutusvoitot", v["sec_gains"] + v["der_gains"] + v["fx_gains"]],
-            ["Luovutustappiot", v["sec_losses"] + v["der_losses"] + v["fx_losses"]],
+            ["Luovutusvoitot", v["sec_gains"] + v["der_gains"] + v["fx_gains"] + v["crypto_gains"]],
+            ["Luovutustappiot", v["sec_losses"] + v["der_losses"] + v["fx_losses"] + v["crypto_losses"]],
             ["Pääomatulo (IBKR)", v["capital_income"]], ["Pääomatulovero, arvio", v["tax_net"]],
         ],
         "ok": None, "ok_text": "",
@@ -136,6 +153,7 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
             "Pääomatulolaskelma": _t(["Erä", "EUR"], [
                 ["Arvopapereiden voitot − tappiot (FIFO)", 0.0 if v["small_exempt"] else v["sec_net"]],
                 ["Johdannaisten voitot − tappiot", v["der_gains"] + v["der_losses"]],
+                ["Kryptovarat voitot − tappiot", 0.0 if v["small_exempt"] else v["crypto_gains"] + v["crypto_losses"]],
                 ["Valuutat", v["fx_gains"] + v["fx_losses"]],
                 ["Osingot × 85 %", v["div_taxable"]], ["Payment in lieu", v["pil_taxable"]],
                 ["Korkotulot", v["int_income"]], ["CFD-voitot (muu pääomatulo)", v["cfd_gains"]],
@@ -146,8 +164,13 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
             "Arvopaperit symboleittain": _t(
                 ["Symboli", "Luovutushinnat", "Hankintamenot", "Voitot", "Tappiot", "Netto (FIFO)", "IBKR R&U"],
                 [[k, *x, x[2] + x[3], pb.ru_by_symbol.get(k, 0.0)] for k, x in sorted(agg.items())], [1, 2, 3, 4, 5, 6]),
-            "Johdannaiset": _t(["Luokka", "Symboli", "Voitot", "Tappiot", "Netto"],
-                               [[r.asset_class, r.symbol, r.profit, r.loss, r.realized] for r in pb.derivatives], [2, 3, 4]),
+            "Johdannaiset": _t(["Luokka", "Symboli", "Voitot", "Tappiot", "Netto", "Markkinapaikka", "Tappio vähennyskelpoinen"],
+                               [[r.asset_class, r.symbol, r.profit, r.loss, r.realized, pb.der_exch.get(r.symbol) or "tuntematon",
+                                 "Ei (ei säännelty markkina)" if r.symbol in pb.nondeductible else "Kyllä"]
+                                for r in pb.derivatives]
+                               + [[f"Asetettu optio ({w['rule']})", w["symbol"], w["amount"] if w["amount"] > 0 else 0.0,
+                                   w["amount"] if w["amount"] < 0 else 0.0, w["amount"], "", w["label"]]
+                                  for w in pb.wopt_rows], [2, 3, 4]),
             "CFD:t": _t(["Päivä", "Symboli", "Tulos", "Käsittely"],
                         [[x["date"], x["symbol"], x["eur"],
                           "Veronalainen (muu pääomatulo)" if x["eur"] > 0 else "Ei huomioida (vähennyskelvoton)"]
@@ -159,7 +182,9 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
                              [[w["country"], w["type"], w["gross"], w["wht"], w["credit"], w["reclaim"]]
                               for w in pb.wht_rows], [2, 3, 4, 5]),
         },
-        "notes": ["Arvio IBKR-tilin osuudesta. Lopullinen vero lasketaan OmaVerossa kaikista tuloistasi."],
+        "notes": ["Arvio IBKR-tilin osuudesta. Lopullinen vero lasketaan OmaVerossa kaikista tuloistasi."]
+                 + ([f"Hankintameno-olettama käytetty {int(v['presumption_lots'])} erässä (vähennys todellisia kuluja "
+                     f"suurempi {_fi(v['presumption_benefit'])} €)."] if v.get("presumption_lots") else []),
     }
     if not pb.cfd_rows:
         del res["tabs"]["CFD:t"]
@@ -173,6 +198,15 @@ def personal(st: Statement, s: PSettings) -> tuple[dict, bytes]:
               sum(e["premium_eur"] for e in pb.option_events if e["symbol"] == o["symbol"]), "–",
               ", ".join(SOURCES.get(k, k) for k in o["methods"]) + " — preemio"]
              for o in pb.opening], [2, 3, 4])
+    if pb.crypto_matches:
+        res["tabs"]["Kryptovarat"] = _t(["Symboli", "Myyntipäivä", "Ostopäivä", "Määrä", "Luovutushinta", "Vähennys", "Tulos", "Lähde"],
+                                        [[m.symbol, m.sale_date, m.buy_date, m.qty, m.proceeds, m.proceeds - m.result,
+                                          m.result, m.source] for m in pb.crypto_matches], [4, 5, 6])
+    if pb.ca_events:
+        res["tabs"]["Yritystapahtumat"] = _t(
+            ["Päivä", "Symboli", "Kerroin", "Määrän muutos", "Käteinen", "Käsittely"],
+            [[e["date"], e["symbol"], "–" if e["factor"] is None else round(e["factor"], 4), e["delta"],
+              e["proceeds_eur"] if e["proceeds_eur"] is not None else "–", e["handled"]] for e in pb.ca_events], [4])
     if pb.option_events:
         res["tabs"]["Toteutetut optiot"] = _t(
             ["Päivä", "Optio", "Kohde-etuus", "Sopimuksia", "Preemio", "Käsittely"],

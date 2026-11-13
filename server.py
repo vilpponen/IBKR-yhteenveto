@@ -125,6 +125,9 @@ class Handler(BaseHTTPRequestHandler):
                     res, xlsx = report.personal(st, PSettings(
                         name=o.get("name", ""), loss_carryforward=f(o.get("loss_cf")),
                         include_fx=bool(o.get("include_fx")), credit_interest_wht=bool(o.get("int_credit")),
+                        use_presumption=bool(o.get("use_presumption", True)),
+                        extra_regulated=str(o.get("extra_regulated", ""))[:500],
+                        fx_mode="ecb" if o.get("fx_mode") == "ecb" else "ibkr",
                         opening_choices=o.get("opening_choices") if isinstance(o.get("opening_choices"), dict) else {}))
                 else:
                     ftt = f(o.get("ftt"))
@@ -132,7 +135,9 @@ class Handler(BaseHTTPRequestHandler):
                         company=o.get("name", ""), share_category=o.get("share_cat", "muu omaisuus"),
                         transaction_fees_override=-abs(ftt) if ftt else None,
                         opening_writedowns=f(o.get("wd_open")), opening_unbooked_gains=f(o.get("ug_open")),
-                        evl8a_carryforward=f(o.get("cf")), credit_interest_wht=bool(o.get("int_credit")),
+                        evl8a_carryforward=f(o.get("cf")), wopt_premium_carry=f(o.get("wopt_cf")), credit_interest_wht=bool(o.get("int_credit")),
+                        wopt_y8={str(k): str(x) for k, x in o["wopt_y8"].items()} if isinstance(o.get("wopt_y8"), dict) else {},
+                        fair_value_5_2a=bool(o.get("fair_value_5_2a")), wopt_loss_carry=f(o.get("wopt_loss_cf")),
                         etf_symbols={x.strip() for x in str(o.get("etfs", "")).split(",") if x.strip()}))
                 res["xlsx"] = base64.b64encode(xlsx).decode()
                 res["version"] = __version__

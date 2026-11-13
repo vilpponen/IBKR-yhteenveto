@@ -11,7 +11,7 @@ import io
 from pathlib import Path
 
 from .model import CashLine, ForexBalance, NavRow, Position, RURow, Statement
-from .parse_common import CFD_CLASSES, NON_FIFO_CODES, OPTION_CLASSES, codes, convert_groups, finalize_positions, parse_period, to_num
+from .parse_common import CFD_CLASSES, CRYPTO_CLASSES, NON_FIFO_CODES, OPTION_CLASSES, codes, convert_groups, finalize_positions, parse_period, to_num
 
 CASH_MAP = {
     "Interest": "interest", "Fees": "fees", "Withholding Tax": "withholding",
@@ -148,15 +148,34 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
             continue
         q, ccy = to_num(d.get("Quantity")), d.get("Currency", "")
         # IBKR Comm/Fee is negative: buy cost = |proceeds + comm| (more), sale price = proceeds + comm (less)
+        comm = abs(to_num(d.get("Comm/Fee")))
         amt = abs(to_num(d.get("Proceeds")) + to_num(d.get("Comm/Fee")))
+        dt = d.get("Date/Time") or ""
+        st.trade_rows.append({"date": dt[:10], "time": dt[12:20].strip(), "symbol": d.get("Symbol", ""), "qty": q,
+                              "comm": comm, "ccy": ccy})
         if ccy == base:
-            st.stock_legs.append({"date": (d.get("Date/Time") or "")[:10], "symbol": d.get("Symbol", ""), "qty": q,
-                                  "ccy": ccy, "eur": amt, "exact": True})
+            st.stock_legs.append({"date": dt[:10], "time": dt[12:20].strip(), "symbol": d.get("Symbol", ""), "qty": q,
+                                  "ccy": ccy, "eur": amt, "comm_eur": comm, "exact": True})
         elif ratio and ratio.get(ccy):
-            st.stock_legs.append({"date": (d.get("Date/Time") or "")[:10], "symbol": d.get("Symbol", ""), "qty": q,
-                                  "ccy": ccy, "eur": amt * abs(ratio[ccy]), "exact": False})
+            st.stock_legs.append({"date": dt[:10], "time": dt[12:20].strip(), "symbol": d.get("Symbol", ""), "qty": q,
+                                  "ccy": ccy, "eur": amt * abs(ratio[ccy]), "comm_eur": comm * abs(ratio[ccy]),
+                                  "cash": amt, "comm_ccy": comm, "exact": False})
 
     st.cfd_trades = _cfd_trades(rows.get("Trades", []), base)
+    cratio = _class_ratio(rows.get("Trades", []), CRYPTO_CLASSES, base)
+    for kind, d in rows.get("Trades", []):
+        cls = d.get("Asset Category", "")
+        if kind != "Data" or cls not in CRYPTO_CLASSES or d.get("DataDiscriminator", "Order") not in ("Order", "Trade", ""):
+            continue
+        q, ccy, dt = to_num(d.get("Quantity")), d.get("Currency", ""), d.get("Date/Time") or ""
+        comm, cash = abs(to_num(d.get("Comm/Fee"))), abs(to_num(d.get("Proceeds")) + to_num(d.get("Comm/Fee")))
+        rate = 1.0 if ccy == base else (abs(cratio[(cls, ccy)]) if (cls, ccy) in cratio else None)
+        if rate is None:
+            st.warnings.append(f"Kryptokauppa {d.get('Symbol', '')} ({ccy}) ilman EUR-muunnosta — ohitettu.")
+            continue
+        st.crypto_legs.append({"date": dt[:10], "time": dt[12:20].strip(), "symbol": d.get("Symbol", ""), "qty": q,
+                               "ccy": ccy, "eur": cash * rate, "comm_eur": comm * rate, "cash": cash, "comm_ccy": comm,
+                               "exact": ccy == base})
     info = {(d.get("Symbol") or "").strip(): d for d in data("Financial Instrument Information")
             if (d.get("Asset Category") or "").strip() in OPTION_CLASSES}
     st.option_trades = _option_trades(rows.get("Trades", []), base, info)
@@ -174,6 +193,18 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
                                + ", ".join(sorted(cs & NON_FIFO_CODES)) + "). Verohallinto edellyttää FIFO-järjestystä; "
                                "tämä laskelma käyttää FIFO:a, joten tulos voi poiketa IBKR:n luvuista.")
 
+
+    # ---- Corporate Actions (shares): no Symbol column — the symbol starts the description ('AAA(US…) Split 4 for 1 …')
+    for d in data("Corporate Actions"):
+        cls, desc = (d.get("Asset Category") or "").strip(), (d.get("Description") or "").strip()
+        if cls != "Stocks" or not desc or desc.startswith("Total"):
+            continue
+        ccy, proceeds = d.get("Currency", ""), to_num(d.get("Proceeds"))
+        rate = 1.0 if ccy == base else (abs(ratio[ccy]) if ratio and ratio.get(ccy) else None)
+        st.corporate_actions.append({"date": (d.get("Date/Time") or d.get("Report Date") or "")[:10],
+                                     "symbol": desc.split("(")[0].strip(), "description": desc,
+                                     "qty": to_num(d.get("Quantity")), "ccy": ccy,
+                                     "proceeds_eur": proceeds * rate if rate is not None else None})
 
     # ---- Cash sections
     for sec, attr in CASH_MAP.items():
@@ -227,6 +258,10 @@ def parse_csv(path_or_text: str | Path, name: str | None = None) -> Statement:
     for d in data("Financial Instrument Information"):
         if (d.get("Type") or "").upper() in ("ETF", "ETN", "ETC", "FUND"):
             st.etf_symbols.add(d.get("Symbol", ""))
+    for d in data("Financial Instrument Information"):
+        ex = (d.get("Listing Exch") or "").strip()
+        if ex and d.get("Symbol"):
+            st.listing_exch[d["Symbol"].strip()] = ex
     return st
 
 
@@ -312,7 +347,10 @@ def _option_trades(trades: list[tuple[str, dict]], base: str, info: dict) -> lis
         und, right, mult = _option_meta(sym, info)
         cash = abs(to_num(d.get("Proceeds")) + to_num(d.get("Comm/Fee")))   # paid incl. / received net of commission
         rate = 1.0 if ccy == base else ratio.get((cls, ccy))
+        basis = abs(to_num(d.get("Basis")))     # closing rows: the opening trade's basis (premium of a written option)
         out.append({"date": (d.get("Date/Time") or "")[:10], "symbol": sym, "underlying": und, "right": right,
                     "mult": mult, "qty": q, "ccy": ccy, "code": d.get("Code", ""),
-                    "eur": cash * abs(rate) if rate is not None else None})
+                    "expiry": ((info.get(sym) or {}).get("Expiry") or "").strip()[:10],
+                    "eur": cash * abs(rate) if rate is not None else None,
+                    "basis_eur": basis * abs(rate) if (rate is not None and basis) else None})
     return out

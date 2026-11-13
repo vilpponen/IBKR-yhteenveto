@@ -66,7 +66,7 @@ def test_exercised_put_premium_reduces_sale_price():
         + t(OPT, "BBB 17JUN26 95 P", "2026-06-17", -1, 0, 0, 0, -150, "C;Ex")
         + t(STK, "BBB", "2026-06-17", -100, 95, 9500, 0, -10000, "C;Ex"))
     (m,) = build_p(data).matches
-    assert (m.proceeds, m.cost, m.result) == (9350, 10000, -650) and m.premium == pytest.approx(150)
+    assert (m.proceeds, m.cost, m.result) == (9500, 10150, -650) and m.premium == pytest.approx(150)   # gross; premium in costs
 
 
 YEAR_START = csv(   # call bought last year: no opening option trade in this statement
@@ -88,17 +88,17 @@ def test_year_start_option_needs_decision():
     assert not pb.preliminary and pb.matches[0].cost == pytest.approx(10250)
 
 
-def test_assignment_not_adjusted():
+def test_same_year_assignment_premium_into_sale_price():   # OPT-H4 (decided 13.11.2026; was "not adjusted")
     data = csv(
         t(STK, "AAA", "2026-01-05", 100, 90, -9000, 0, 9000, "O")
         + t(OPT, "AAA 17JUN26 100 C", "2026-02-02", -1, 3, 300, 0, -300, "O")    # written call, premium received
         + t(OPT, "AAA 17JUN26 100 C", "2026-06-17", 1, 0, 0, 0, 300, "C;A")      # assigned
         + t(STK, "AAA", "2026-06-17", -100, 100, 10000, 0, -9000, "C;A"))
-    pb = build_p(data)
+    pb = build_p(data, use_presumption=False)
     (m,) = pb.matches
-    assert (m.proceeds, m.cost) == (10000, 9000) and m.premium == 0
-    assert pb.option_events[0]["kind"] == "assignment"
-    assert any("toteutusvelvoite" in w for w in pb.warnings)
+    assert (m.proceeds, m.cost, m.result) == (10300, 9000, 1300)       # call: premium → sale price of shares delivered
+    ev = pb.option_events[0]
+    assert ev["kind"] == "assignment" and "OPT-H4" in ev["target"]
 
 
 def test_usd_premium_converted_with_class_ratio():

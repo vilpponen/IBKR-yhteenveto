@@ -8,6 +8,50 @@ keskimmäinen numero (MINOR) nousee, kun tulee uusi toiminto tai **mikä tahansa
 lukuja** — jos se on noussut, laske vanha työkirja uudelleen. Viimeinen numero (PATCH) nousee muutoksista, jotka eivät
 koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on merkitty versio, jolla luvut on laskettu.
 
+## 2026-11-13
+
+### 0.10.0 — Hankintameno-olettama, kryptovarat ja asetetut optiot ([#10](https://github.com/vilpponen/IBKR-yhteenveto/pull/10))
+
+**Uutta**
+- Yksityishenkilö: **hankintameno-olettama erittäin** (20 %, 40 % jos omistettu vähintään 10 vuotta). Olettama
+  lasketaan bruttomyyntihinnasta (ennen myyntiprovisiota ja myyntioption preemiota), eikä sen kanssa vähennetä kuluja.
+  Laskelma käyttää sitä, kun se antaa pienemmän voiton; se ei synnytä eikä kasvata tappiota. Valinta asetuksissa.
+- Yksityishenkilö: **yritystapahtumat FIFO:ssa** (Activity Statement CSV). Split, osakkeiden yhdistely ja osake- tai
+  rahastoanti jakavat hankintamenon uusille osakkeille, ja omistusaika säilyy. Yhdistelyssä murto-osista maksettu
+  käteinen käsitellään luovutuksena. Jos tapahtuman tyyppiä ei tunnisteta, osakkeen laskenta keskeytyy ja tulos
+  merkitään keskeneräiseksi (ei hiljaista virhetäsmäytystä).
+- Yksityishenkilö: **johdannaisten markkinapaikka**. Futuurien ja optioiden tappiot vähennetään vain, kun
+  markkinapaikka on säännelty tai siihen rinnastettava (oletuksena ETA:n ja Yhdysvaltain pörssit, listaa voi täydentää
+  asetuksissa). Muiden markkinapaikkojen tappiot näytetään vähennyskelvottomina; voitot verotetaan.
+- Komentorivi: **henkilötila** (`--personal`) sekä `--loss-cf`, `--include-fx`, `--no-presumption`,
+  `--extra-regulated` ja `--opening-lots` (web-sovelluksen JSON-vienti). Keskeneräinen tulos palauttaa koodin 2.
+- Yksityishenkilö: **valinnainen EKP-kurssitila**. Kun EKP:n kurssitiedosto (`eurofxref-hist.csv`) lisätään
+  raporttien kanssa, kaupat muunnetaan EKP:n viitekurssilla selvityspäivältä, ja tulos näyttää eron IBKR:n kursseihin.
+  Ei verkkoyhteyksiä; oletuksena edelleen IBKR:n kauppakohtaiset EUR-määrät.
+- Yksityishenkilö: **kryptovarat** (IBKR:n Crypto-luokka, Activity Statement CSV). Luovutukset FIFO-järjestyksessä
+  kolikoittain, hankintameno-olettama kuten osakkeilla, oma kohta OmaVero-kentissä ja työkirjassa. 1 000 euron
+  pienten luovutusten raja lasketaan arvopapereiden ja kryptovarojen luovutushinnoista yhteensä. Osakeyhtiössä
+  kryptot ovat muuta omaisuutta (kuten aiemmin).
+- **Asetetut optiot.** Yksityishenkilö: vuoden lopussa avoinna olevan, tänä vuonna asetetun option preemio
+  verotetaan asetusvuonna; aiempana vuonna asetetun option takaisinostossa tai raukeamisessa jo verotettu preemio
+  vähennetään; samana vuonna asetettuun ja suljettuun optioon hankintameno-olettama 20 % preemiosta, kun edullisempi.
+  Toteutusvelvoite samana vuonna: preemio osakkeiden hintaan; aiempana vuonna asetettu: ei oikaisua. Osakeyhtiö:
+  OTC- ja yli 18 kuukauden asetettujen optioiden preemio verotetaan asetusvuonna (EVL 27 d § 1 mom.) ja vähennetään
+  sulkemisvuonna. Käsittelyperusteet: `docs/PAATOSREKISTERI.md`.
+- Osakeyhtiö: **avoimet asetetut optiot tilinpäätöksessä** (OPT-Y8, ehdotus). Tilikauden lopussa avoinna olevan
+  asetetun option kirjanpidon tappio näytetään omana vaiheenaan, ja käsittely valitaan optioittain: lisätään takaisin
+  verotuksessa, vähennetään kirjanpidon mukaisesti tai EVL 27 e § (vain käypään arvoon arvostavalle yhtiölle).
+  Ilman valintaa tappio lisätään takaisin ja tulos merkitään keskeneräiseksi. Tappio on EVL-täsmäytyksessä omalla
+  rivillään (ei enää futuurien ja ETF:ien rivillä), ja edellisenä vuonna lisätty määrä vähennetään uudella syötteellä.
+  Komentorivi: `--wopt-y8`, `--fair-value-5-2a`, `--wopt-loss-carry`.
+- **Päätösrekisteri** ([docs/PAATOSREKISTERI.md](docs/PAATOSREKISTERI.md)): käsittelysäännöt, niiden lähteet ja tila
+  yhdessä tiedostossa. Ei muuta laskentaa.
+
+**Muutettu**
+- OmaVero-kentät: luovutushinnat ovat bruttomyyntihintoja ja myyntiprovisiot ovat kuluissa (aiemmin myyntiprovisio
+  oli vähennetty luovutushinnasta). Luovutusvoitot eivät muutu, ellei olettamaa käytetä.
+- PDF:n kauppakohtaisille riveille myyntiprovisio luetaan CSV:n toimeksiantoriveiltä.
+
 ## 2026-11-08
 
 ### 0.9.0 — Versionumero ([#8](https://github.com/vilpponen/IBKR-yhteenveto/pull/8))
