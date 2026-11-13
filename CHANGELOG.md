@@ -10,6 +10,31 @@ koskaan muuta lukuja (tekstit, ohjeet, asennus). Työkirjaan ja sovellukseen on 
 
 ## 2026-11-13
 
+### 0.11.0 — Tarkka laskenta, syötteen tarkistus ja lukitut riippuvuudet ([#11](https://github.com/vilpponen/IBKR-yhteenveto/pull/11))
+
+**Uutta**
+- **Tarkat rahasummat:** kaikki laskenta tehdään desimaalilukuina täydellä tarkkuudella (ei liukulukuja), ja summat
+  pyöristetään senteiksi vasta näkymässä, puolikkaat parilliseen (10,005 → 10,00). Excel-soluihin kirjoitetaan täysi
+  tarkkuus, joten työkirjan kaavat täsmäävät laskelmaan sentilleen.
+- **Virheellinen syöte pysäyttää laskennan:** lukukelvoton luku, NaN, ääretön, virheellinen päivämäärä, negatiivinen
+  määrä tai hankintameno vuoden alun erässä tai negatiivinen asetus antaa selvän virheen (tiedosto, osio, rivi, arvo)
+  näkymässä ja komentorivillä (paluukoodi 3). Aiemmin lukukelvoton arvo muuttui hiljaa nollaksi. Tyhjä solu ja "--"
+  ovat edelleen 0.
+- **Ei verkkoyhteyksiä:** testi varmistaa, ettei laskentakoodi avaa verkkoyhteyksiä.
+- **Lukitut riippuvuudet:** `requirements.txt` sisältää tarkat versiot ja SHA-256-tiivisteet kaikille alustoille ja
+  Python-versioille 3.10–3.14; asennus (run.sh, run.ps1, CI) tarkistaa ne (`--require-hashes`). Asennus ei enää
+  päivitä pipiä verkosta. Lukitus päivitetään skriptillä `scripts/lock_deps.sh`.
+
+**Muutettu**
+- IBKR-tarkistusten (Change in NAV) toleranssi on 0,01 € (aiemmin 1 €); sisäiset täsmäytykset ovat tarkkoja.
+- Seuraavan vuoden erätiedostoon (JSON) hankintamenot viedään täydellä tarkkuudella (aiemmin pyöristettiin senteiksi).
+
+**Korjattu**
+- Osakeyhtiön työkirja: kun jokin osio oli tyhjä (esim. ei osinkoja), sen summakaava viittasi omaan soluunsa
+  (kehäviittaus), jolloin Excel varoitti ja osa tilikartan tarkistuksista jäi laskematta. Tyhjään osioon tulee nyt
+  rivi "(ei rivejä)".
+- Excel-solujen numeromuotoilu säilyy desimaaliluvuilla.
+
 ### 0.10.0 — Hankintameno-olettama, kryptovarat ja asetetut optiot ([#10](https://github.com/vilpponen/IBKR-yhteenveto/pull/10))
 
 **Uutta**

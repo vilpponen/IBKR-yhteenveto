@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from ibkr_yhteenveto.num import loads, to_jsonable
+
 import server
 from ibkr_yhteenveto import load, report
 from ibkr_yhteenveto.books import Settings
@@ -29,7 +31,7 @@ def test_in_memory_load_matches_path_load():
 
 def test_statement_json_round_trip_gives_same_result():
     st = load([FIXTURE])
-    back = Statement.from_dict(json.loads(json.dumps(st.to_dict())))
+    back = Statement.from_dict(loads(json.dumps(to_jsonable(st.to_dict()))))
     assert back.to_dict() == st.to_dict()
     r1, _ = report.company(st, Settings())
     r2, _ = report.company(back, Settings())

@@ -7,6 +7,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment
 from openpyxl.worksheet.datavalidation import DataValidation
 
+from .num import Decimal
 from .version import __version__
 from .xlsx_mem import workbook_bytes
 
@@ -80,13 +81,13 @@ def write_personal_workbook(b: PBooks) -> bytes:
                 ded = f'=IF({ref["olet"]}="Kyllä",MAX(F{r},L{r}),F{r})'
             else:
                 ded = f"=F{r}"
-            sh.row([m.symbol, m.sale_date, m.buy_date, m.qty, round(m.proceeds, 2),
-                    None if m.method == "olettama" else round(m.cost, 2), f"=E{r}-M{r}",
-                    m.source, "Kyllä" if m.short else "", round(m.premium, 2) if m.premium else None,
+            sh.row([m.symbol, m.sale_date, m.buy_date, m.qty, m.proceeds,
+                    None if m.method == "olettama" else m.cost, f"=E{r}-M{r}",
+                    m.source, "Kyllä" if m.short else "", m.premium if m.premium else None,
                     m.presumption_rate, f"=E{r}*K{r}", ded],
                    ["in", "in", "in", "in", "in", "in", "f", "t", "t", "in", "in", "f", "f"],
                    fmt=[None, None, None, "#,##0.####", None, None, None, None, None, None, PCT])
-        r1 = max(sh.r - 1, r0)
+        r1 = sh.end(r0)
         rng = dict(sym=f"'{sh.name}'!$A${r0}:$A${r1}", L=f"'{sh.name}'!$E${r0}:$E${r1}",
                    H=f"'{sh.name}'!$M${r0}:$M${r1}", R=f"'{sh.name}'!$G${r0}:$G${r1}")
         rt = sh.row(["Yhteensä", None, None, None, f"=SUM(E{r0}:E{r1})", f"=SUM(F{r0}:F{r1})", f"=SUM(G{r0}:G{r1})",
@@ -125,12 +126,12 @@ def write_personal_workbook(b: PBooks) -> bytes:
             meth = ", ".join(SOURCES.get(k, k) for k in o["methods"])
             if o.get("kind") == "option":
                 prem = sum(e["premium_eur"] for e in b.option_events if e["symbol"] == o["symbol"])
-                va.row([o["symbol"] + " (optio)", o["qty"], None, round(prem, 2), None, o["first_sale"], o["last_sale"],
+                va.row([o["symbol"] + " (optio)", o["qty"], None, prem, None, o["first_sale"], o["last_sale"],
                         meth + " — preemio, toteutettu"], ["in", "in", None, "in", None, "in", "in", "t"],
                        fmt=[None, "#,##0.####"])
                 continue
-            va.row([o["symbol"] + (" (short)" if o["short"] else ""), o["qty"], round(o["proceeds_eur"], 2),
-                    round(o["cost_eur"], 2), f"=C{r}-D{r}", o["first_sale"], o["last_sale"], meth],
+            va.row([o["symbol"] + (" (short)" if o["short"] else ""), o["qty"], o["proceeds_eur"],
+                    o["cost_eur"], f"=C{r}-D{r}", o["first_sale"], o["last_sale"], meth],
                    ["in", "in", "in", "in", "f", "in", "in", "t"], fmt=[None, "#,##0.####"])
         va.blank()
         va.note("Käsittelytavat: Käyttäjän syöttämä = alkuperäiset ostotiedot; Edellisvuoden raportti = erä luettu "
@@ -181,10 +182,10 @@ def write_personal_workbook(b: PBooks) -> bytes:
     for w in b.wopt_rows:      # written options: adjustments to IBKR's realized results (decisions OPT-H1/H6/H7)
         r = de.r
         on_loss = w["rule"] == "OPT-H6" and w["symbol"] not in b.nondeductible
-        de.row([f"Asetettu optio ({w['rule']})", w["symbol"], None if on_loss else round(w["amount"], 2),
-                round(w["amount"], 2) if on_loss else None, f"=C{r}+D{r}", f"{w['label']} · {w['date']}"],
+        de.row([f"Asetettu optio ({w['rule']})", w["symbol"], None if on_loss else w["amount"],
+                w["amount"] if on_loss else None, f"=C{r}+D{r}", f"{w['label']} · {w['date']}"],
                ["t", "in", "in", "in", "f", "t"])
-    r1 = max(de.r - 1, r0)
+    r1 = de.end(r0)
     rt = de.row(["Yhteensä", None, f"=SUM(C{r0}:C{r1})" if b.derivatives else 0, f"=SUM(D{r0}:D{r1})" if b.derivatives else 0,
                  f"=C{de.r}+D{de.r}"], bold=True, total=True)
     if b.v.get("der_losses_nondeductible"):
@@ -205,7 +206,7 @@ def write_personal_workbook(b: PBooks) -> bytes:
         de.section("TOTEUTETUT OPTIOT — preemio osakkeisiin (KHO 2012:69)", 6)
         de.header(["Päivä", "Optio", "Preemio €", "Sopimuksia", "Kohde-etuus", "Käsittely"])
         for ev in b.option_events:
-            de.row([ev["date"], ev["symbol"], round(ev["premium_eur"], 2) if ev["kind"] == "exercise" else None,
+            de.row([ev["date"], ev["symbol"], ev["premium_eur"] if ev["kind"] == "exercise" else None,
                     ev["contracts"], ev["underlying"],
                     ev.get("target", "") + " · " + ", ".join(SOURCES.get(k, k) for k in ev["methods"])],
                    ["in", "in", "in", "in", "in", "t"])
@@ -217,8 +218,8 @@ def write_personal_workbook(b: PBooks) -> bytes:
     de.header(["Päivä", "Symboli", "Tulos €", "Luokka", None, "Lähde"])
     r0 = de.r
     for x in b.cfd_rows:
-        de.row([x["date"], x["symbol"], round(x["eur"], 2), x["cls"], None, x["source"]], ["in", "in", "in", "in", None, "t"])
-    r1 = max(de.r - 1, r0)
+        de.row([x["date"], x["symbol"], x["eur"], x["cls"], None, x["source"]], ["in", "in", "in", "in", None, "t"])
+    r1 = de.end(r0)
     rt = de.row(["Voitot (veronalainen muu pääomatulo)", None, f'=SUMIF(C{r0}:C{r1},">0")' if b.cfd_rows else 0],
                 bold=True, total=True)
     ref["CFG"] = de.q(f"C{rt}")
@@ -235,7 +236,7 @@ def write_personal_workbook(b: PBooks) -> bytes:
     for x in st.dividends:
         dv.row([x.date, x.description, x.currency, x.amount, x.amount_eur, "PIL" if _is_pil(x.description) else "Osinko"],
                ["in", "in", "in", "in", "in", "in"])
-    r1 = max(dv.r - 1, r0)
+    r1 = dv.end(r0)
     rt = dv.row(["Osingot (brutto)", None, None, None, f'=SUMIF(F{r0}:F{r1},"Osinko",E{r0}:E{r1})'], bold=True)
     ref["div"] = dv.q(f"E{rt}")
     rt = dv.row(["Payment in lieu", None, None, None, f'=SUMIF(F{r0}:F{r1},"PIL",E{r0}:E{r1})'], bold=True)
@@ -272,7 +273,7 @@ def write_personal_workbook(b: PBooks) -> bytes:
         kk.row([x.date, x.description, x.currency, x.amount, x.amount_eur,
                 "Korkotulo" if x.amount_eur > 0 else CFDC if _is_cfd_cost(x.description) else "Korko tulonhankkimisvelasta"],
                ["in", "in", "in", "in", "in", "t"])
-    r1 = max(kk.r - 1, r0)
+    r1 = kk.end(r0)
     rt = kk.row(["Korkotulot", None, None, None, f'=SUMIF(F{r0}:F{r1},"Korkotulo",E{r0}:E{r1})'], bold=True)
     ref["ii"] = kk.q(f"E{rt}")
     rt = kk.row(["Korkokulut (vähennys)", None, None, None, f'=-SUMIF(F{r0}:F{r1},"Korko tulonhankkimisvelasta",E{r0}:E{r1})'],
@@ -283,7 +284,7 @@ def write_personal_workbook(b: PBooks) -> bytes:
     for x in st.fees:
         kk.row([x.date, x.description, x.currency, x.amount, x.amount_eur,
                 CFDC if _is_cfd_cost(x.description) else "Tulonhankkimismeno"], ["in", "in", "in", "in", "in", "t"])
-    r1 = max(kk.r - 1, r0)
+    r1 = kk.end(r0)
     rt = kk.row(["Muut tulonhankkimismenot", None, None, None,
                  f'=-SUMIF(F{r0}:F{r1},"Tulonhankkimismeno",E{r0}:E{r1})' if st.fees else 0], bold=True, total=True)
     ref["fees"] = kk.q(f"E{rt}")

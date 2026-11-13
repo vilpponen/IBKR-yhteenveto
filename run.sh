@@ -4,7 +4,7 @@
 # Mitä skripti tekee (jokainen komento tulostetaan '+'-merkillä):
 #   1. tarkistaa python3:n (3.10+)
 #   2. luo yksityisen virtuaaliympäristön ./.venv (mitään ei asenneta järjestelmään)
-#   3. asentaa requirements.txt:n (pdfplumber, openpyxl) — vain jos ei jo asennettu;
+#   3. asentaa lukitun requirements.txt:n (pdfplumber, openpyxl; tiivisteet tarkistetaan) — vain jos ei jo asennettu;
 #      keskeytynyt asennus jatkuu automaattisesti
 #   4. käynnistää paikallisen palvelimen (server.py, vain Pythonin standardikirjasto)
 # Poisto: poista .venv-kansio.
@@ -26,12 +26,12 @@ else
 fi
 
 step "3/4  Riippuvuudet (requirements.txt)"
-cat requirements.txt
+grep -E '^[a-zA-Z]' requirements.txt | sed 's/ \\$//'
 if [ -f .venv/.install-complete ] && cmp -s requirements.txt .venv/.install-complete; then
   echo "Riippuvuudet jo asennettu — ohitetaan (poista .venv pakottaaksesi uudelleenasennuksen)"
 else
-  .venv/bin/python -m pip install --upgrade pip
-  .venv/bin/python -m pip install -r requirements.txt
+  # lukitut versiot ja SHA-256-tiivisteet: pip asentaa vain täsmälleen nämä paketit (62N-97)
+  .venv/bin/python -m pip install --disable-pip-version-check --require-hashes -r requirements.txt
   .venv/bin/python -c "import pdfplumber, openpyxl; print('imports OK')"
   cp requirements.txt .venv/.install-complete
 fi

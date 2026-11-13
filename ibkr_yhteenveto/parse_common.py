@@ -4,7 +4,10 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
+from decimal import Decimal, InvalidOperation
+
 from .model import CashLine, Position, Statement
+from .num import ZERO, dec, fail
 
 NUM_RE = re.compile(r"^\(?-?[\d,]*\.?\d+\)?%?$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
@@ -38,20 +41,25 @@ def is_num(tok: str) -> bool:
     return bool(NUM_RE.match(tok)) and any(c.isdigit() for c in tok)
 
 
-def to_num(tok) -> float:
+def to_num(tok) -> Decimal:
+    """IBKR number token → exact Decimal. Empty cell, '-' or '--' = 0; '(1,234.50)' = -1234.50; '12%' = 12.
+    Anything else that is not a finite number stops the calculation (InputError with file/section/line)."""
     if tok is None:
-        return 0.0
-    if isinstance(tok, (int, float)):
-        return float(tok)
-    s = str(tok).strip().replace(",", "").replace("%", "")
+        return ZERO
+    if isinstance(tok, (int, float, Decimal)) and not isinstance(tok, bool):
+        return dec(tok)
+    raw = str(tok)
+    s = raw.strip().replace(",", "").replace("%", "")
     if not s or s in ("-", "--"):
-        return 0.0
+        return ZERO
     neg = s.startswith("(") and s.endswith(")")
     s = s.strip("()")
     try:
-        v = float(s)
-    except ValueError:
-        return 0.0
+        v = Decimal(s)
+    except InvalidOperation:
+        raise fail("lukukelvoton luku", raw) from None
+    if not v.is_finite():
+        raise fail("luku ei ole äärellinen (NaN tai ääretön)", raw)
     return -v if neg else v
 
 
@@ -96,10 +104,10 @@ def convert_groups(lines: list[CashLine], group_tot: dict, group_tot_eur: dict, 
             ln.amount_eur = ln.amount
             continue
         t, te = group_tot.get(ln.currency), group_tot_eur.get(ln.currency)
-        if t and te is not None and abs(t) > 1e-9:
+        if t and te is not None and t != 0:
             ln.amount_eur = ln.amount * te / t
         else:
-            ln.amount_eur = 0.0
+            ln.amount_eur = ZERO
             warnings.append(f"{section}: no EUR total for {ln.currency}; line '{ln.description}' not converted")
 
 
@@ -121,7 +129,7 @@ def finalize_positions(groups: list[dict], base: str, st: Statement) -> None:
                 continue
             ec, ev, _eu = eur
             for p in rows:
-                p.cost_basis_eur = p.cost_basis * ec / tc if tc else 0.0
-                p.value_eur = p.value * ev / tv if tv else 0.0
+                p.cost_basis_eur = p.cost_basis * ec / tc if tc else ZERO
+                p.value_eur = p.value * ev / tv if tv else ZERO
                 p.unrealized_eur = p.value_eur - p.cost_basis_eur
         st.positions += rows

@@ -1,0 +1,4 @@
+# Suorat riippuvuudet. Lukittu tiedosto requirements.txt (tarkat versiot + SHA-256-tiivisteet) tehdään tästä:
+#   bash scripts/lock_deps.sh
+pdfplumber>=0.11
+openpyxl>=3.1

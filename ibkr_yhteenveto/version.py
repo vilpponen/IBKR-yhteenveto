@@ -6,4 +6,4 @@ MAJOR.MINOR.PATCH, 0.x until ready for real filings (1.0):
   PATCH — never alters figures: UI text, documentation, installers, CI.
 Bumped in the release commit (dev → main), together with dating the CHANGELOG's "Tulossa (dev)" section.
 """
-__version__ = "0.10.0"
+__version__ = "0.11.0"

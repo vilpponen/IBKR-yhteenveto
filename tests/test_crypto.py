@@ -1,4 +1,5 @@
 """62N-92: crypto assets — FIFO per coin, own OmaVero section, olettama, combined 1 000 € limit (synthetic data)."""
+from decimal import Decimal
 import io
 
 import pytest
@@ -57,7 +58,7 @@ def test_crypto_bought_last_year_needs_decision():
     data = HEAD + t(CR, "BTC.EUR-PAXOS", "2026-05-04", -0.1, 50000, 5000, 0, -3000, "C")
     st = load([("s.csv", data.encode())])
     (o,) = [x for x in opening_lots(st) if x["kind"] == "crypto"]
-    assert o["symbol"] == "BTC.EUR-PAXOS" and o["opening_qty"] == pytest.approx(0.1)
+    assert o["symbol"] == "BTC.EUR-PAXOS" and o["opening_qty"] == pytest.approx(Decimal("0.1"))
     assert build_personal(st, PSettings()).preliminary
     ch = {"BTC.EUR-PAXOS": {"method": "lots", "lots": [{"date": "2014-01-02", "qty": 0.1, "olettama": True}]}}
     m = build_personal(st, PSettings(opening_choices=ch)).crypto_matches[0]

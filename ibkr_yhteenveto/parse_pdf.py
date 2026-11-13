@@ -15,7 +15,10 @@ from pathlib import Path
 
 import pdfplumber
 
+from decimal import Decimal
+
 from .model import CashLine, ForexBalance, NavRow, Position, RURow, Statement
+from .num import ZERO, check_date, located
 from .parse_common import (ASSET_CLASSES, CCY_RE, DATE_RE, convert_groups, finalize_positions,
                            is_num, parse_period, split_label_nums, to_num)
 
@@ -64,6 +67,12 @@ def _split_sections(lines: list[str]) -> list[tuple[str, list[str]]]:
 
 def parse_pdf(path: str | Path | bytes, name: str | None = None) -> Statement:
     """Parse an IBKR PDF from a path, or from bytes in memory (nothing is written to disk)."""
+    fname = name or ("statement.pdf" if isinstance(path, (bytes, bytearray)) else Path(path).name)
+    with located(file=fname):
+        return _parse_pdf(path, name)
+
+
+def _parse_pdf(path: str | Path | bytes, name: str | None = None) -> Statement:
     if isinstance(path, (bytes, bytearray)):
         src, name = io.BytesIO(path), name or "statement.pdf"
     else:
@@ -86,13 +95,20 @@ def parse_pdf(path: str | Path | bytes, name: str | None = None) -> Statement:
     def body(name):  # concatenate all occurrences
         return [l for b in by_name.get(name, []) for l in b]
 
-    _account(body("Account Information"), st)
-    _nav(body("Net Asset Value") + body("Change in NAV"), st)
-    _ru(body("Realized & Unrealized Performance Summary"), st)
-    _positions(body("Open Positions"), st)
-    _forex_bal(body("Forex Balances"), st)
-    _trades(body("Trades"), st)
-    _stock_legs(body("Trades"), body("Forex P/L Details"), st)
+    with located(section="Account Information"):
+        _account(body("Account Information"), st)
+    with located(section="Net Asset Value"):
+        _nav(body("Net Asset Value") + body("Change in NAV"), st)
+    with located(section="Realized & Unrealized Performance Summary"):
+        _ru(body("Realized & Unrealized Performance Summary"), st)
+    with located(section="Open Positions"):
+        _positions(body("Open Positions"), st)
+    with located(section="Forex Balances"):
+        _forex_bal(body("Forex Balances"), st)
+    with located(section="Trades"):
+        _trades(body("Trades"), st)
+    with located(section="Forex P/L Details"):
+        _stock_legs(body("Trades"), body("Forex P/L Details"), st)
     if body("Corporate Actions"):
         st.warnings.append("PDF:ssä on yritystapahtumia (Corporate Actions); ne luetaan vain Activity Statement CSV:stä "
                            "— lisää CSV, jotta splitit ja osakeannit huomioidaan FIFO-laskennassa.")
@@ -102,7 +118,8 @@ def parse_pdf(path: str | Path | bytes, name: str | None = None) -> Statement:
         b = body(name)
         if not b:
             continue
-        cl, total_eur = _cash_section(b, st.base_currency, st.warnings, name)
+        with located(section=name):
+            cl, total_eur = _cash_section(b, st.base_currency, st.warnings, name)
         setattr(st, attr, cl)
         tot = total_eur if total_eur is not None else sum(x.amount_eur for x in cl)
         {"interest": lambda: setattr(st, "interest_total_eur", tot),
@@ -202,10 +219,10 @@ def _forex_bal(lines, st):
 def _trades(lines, st):
     """Collect commissions (EUR) from currency-group totals."""
     cls, ccy, pending = "", "", None
-    comm: dict[str, float] = {}
+    comm: dict[str, Decimal] = {}
 
     def add(c, v):
-        comm[c] = comm.get(c, 0.0) + v
+        comm[c] = comm.get(c, ZERO) + v
 
     for l in lines:
         if l in ASSET_CLASSES:
@@ -259,12 +276,12 @@ def _cash_section(lines, base, warnings, section):
                 elif label == "Total in " + base:
                     gte[ccy] = nums[-1]
                 elif label.endswith("in " + base):
-                    section_total_eur = (section_total_eur or 0.0) + nums[-1]
+                    section_total_eur = (section_total_eur or ZERO) + nums[-1]
             buf, last = [], None
             continue
         if DATE_RE.match(l):
             toks = l.split()
-            date = toks[0]
+            date = check_date(toks[0])
             rest = toks[1:]
             code = ""
             if rest and not is_num(rest[-1]) and len(rest) >= 2 and is_num(rest[-2]):
@@ -300,7 +317,7 @@ def _cash_section(lines, base, warnings, section):
         if set(gt) <= {base} and gt:
             section_total_eur = sum(gt.values())
         elif gte or gt:
-            section_total_eur = sum(gte.get(c, gt[c] if c == base else 0.0) for c in gt)
+            section_total_eur = sum(gte.get(c, gt[c] if c == base else ZERO) for c in gt)
     return out, section_total_eur
 
 
@@ -317,7 +334,7 @@ def _stock_legs(trade_lines, fx_lines, st):
             qty = to_num(m.group(1))
             # net of commission (the lots of one order add up to proceeds + commission); the commission share is
             # added from the CSV order row in load() when the CSV is also given
-            st.stock_legs.append({"date": m.group(3), "time": m.group(4), "symbol": m.group(2), "qty": qty,
+            st.stock_legs.append({"date": check_date(m.group(3)), "time": m.group(4), "symbol": m.group(2), "qty": qty,
                                   "ccy": m.group(5), "cash": abs(to_num(m.group(6))),
                                   "eur": abs(to_num(m.group(7))), "exact": True})
     cls, ccy, date = "", "", ""
@@ -329,13 +346,13 @@ def _stock_legs(trade_lines, fx_lines, st):
             ccy = l
             continue
         if DATE_RE.match(l):
-            date = l[:10]
+            date = check_date(l[:10])
             continue
         if cls != "Stocks" or ccy != st.base_currency or l.startswith("Total"):
             continue
         label, nums, _code = split_label_nums(l, 6)
         if len(nums) == 5:  # price wrapped onto another line
-            nums = [nums[0], 0.0] + nums[1:]
+            nums = [nums[0], ZERO] + nums[1:]
         if len(nums) >= 6 and label:
             qty, _px, proceeds, comm, _basis, _rl = nums[-6:]
             st.stock_legs.append({"date": date, "symbol": label, "qty": qty, "ccy": ccy, "comm_eur": abs(comm),

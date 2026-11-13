@@ -27,6 +27,8 @@ from ibkr_yhteenveto.books import Settings
 from ibkr_yhteenveto.model import Statement
 from ibkr_yhteenveto.personal import PSettings
 from ibkr_yhteenveto import report
+from ibkr_yhteenveto.num import ZERO, InputError, dec, loads, located, nonneg, response_json
+from decimal import Decimal
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -49,11 +51,12 @@ def decode_files(items) -> list[tuple[str, bytes]]:
     return out
 
 
-def f(x, default=0.0) -> float:
-    try:
-        return float(x)
-    except (TypeError, ValueError):
-        return default
+def f(x, what: str = "asetus") -> Decimal:
+    """Euro amount from the settings form: empty = 0; otherwise an exact, finite, non-negative Decimal (InputError)."""
+    if x is None or (isinstance(x, str) and not x.strip()):
+        return ZERO
+    with located(section="Asetukset"):
+        return nonneg(dec(str(x).replace(",", ".") if isinstance(x, str) else x, what), what)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -76,7 +79,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _json(self, obj, code=200):
-        self._send(code, json.dumps(obj, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+        self._send(code, response_json(obj), "application/json; charset=utf-8")
 
     def _body(self) -> bytes:
         n = int(self.headers.get("Content-Length") or 0)
@@ -114,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "forbidden"}, 403)
         url = urlparse(self.path)
         try:
-            req = json.loads(self._body() or b"{}")
+            req = loads(self._body() or b"{}")
             if url.path == "/api/analyze":     # statements in -> recognised summary + parsed statement out
                 st = load(decode_files(req.get("files")))
                 return self._json({"recognised": report.recognised(st), "statement": st.to_dict()})
@@ -123,26 +126,28 @@ class Handler(BaseHTTPRequestHandler):
                 o = req.get("settings", {})
                 if req.get("mode") == "personal":
                     res, xlsx = report.personal(st, PSettings(
-                        name=o.get("name", ""), loss_carryforward=f(o.get("loss_cf")),
+                        name=o.get("name", ""), loss_carryforward=f(o.get("loss_cf"), "Aiempien vuosien luovutustappiot"),
                         include_fx=bool(o.get("include_fx")), credit_interest_wht=bool(o.get("int_credit")),
                         use_presumption=bool(o.get("use_presumption", True)),
                         extra_regulated=str(o.get("extra_regulated", ""))[:500],
                         fx_mode="ecb" if o.get("fx_mode") == "ecb" else "ibkr",
                         opening_choices=o.get("opening_choices") if isinstance(o.get("opening_choices"), dict) else {}))
                 else:
-                    ftt = f(o.get("ftt"))
+                    ftt = f(o.get("ftt"), "Transaktioverot (FTT)")
                     res, xlsx = report.company(st, Settings(
                         company=o.get("name", ""), share_category=o.get("share_cat", "muu omaisuus"),
                         transaction_fees_override=-abs(ftt) if ftt else None,
-                        opening_writedowns=f(o.get("wd_open")), opening_unbooked_gains=f(o.get("ug_open")),
-                        evl8a_carryforward=f(o.get("cf")), wopt_premium_carry=f(o.get("wopt_cf")), credit_interest_wht=bool(o.get("int_credit")),
+                        opening_writedowns=f(o.get("wd_open"), "Avaavat arvonalentumiset"), opening_unbooked_gains=f(o.get("ug_open"), "Avaavat kirjaamattomat arvonnousut"),
+                        evl8a_carryforward=f(o.get("cf"), "Käyttämättömät osaketappiot (EVL 8 a §)"), wopt_premium_carry=f(o.get("wopt_cf"), "Aiemmin verotetut asetettujen optioiden preemiot"), credit_interest_wht=bool(o.get("int_credit")),
                         wopt_y8={str(k): str(x) for k, x in o["wopt_y8"].items()} if isinstance(o.get("wopt_y8"), dict) else {},
-                        fair_value_5_2a=bool(o.get("fair_value_5_2a")), wopt_loss_carry=f(o.get("wopt_loss_cf")),
+                        fair_value_5_2a=bool(o.get("fair_value_5_2a")), wopt_loss_carry=f(o.get("wopt_loss_cf"), "Edellisellä tilikaudella lisätyt asetettujen optioiden tappiot"),
                         etf_symbols={x.strip() for x in str(o.get("etfs", "")).split(",") if x.strip()}))
                 res["xlsx"] = base64.b64encode(xlsx).decode()
                 res["version"] = __version__
                 return self._json(res)
             return self._json({"error": "not found"}, 404)
+        except InputError as e:  # unreadable input: tell the user where (file, section, line, value)
+            return self._json({"error": f"Virheellinen syöte — {e}"}, 400)
         except Exception as e:  # report errors to the page instead of a dead request
             if DEBUG:
                 traceback.print_exc()

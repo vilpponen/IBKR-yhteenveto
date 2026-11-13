@@ -1,5 +1,6 @@
 """62N-89: hankintameno-olettama per lot — 20 % (40 % if held ≥ 10 years) of the GROSS sale price, used when it gives
 the lower gain; no costs are deducted with it; it never creates a loss (synthetic data)."""
+from decimal import Decimal
 import io
 
 import pytest
@@ -33,7 +34,7 @@ def test_forty_percent_after_ten_years():
     st = load([("s.csv", csv(t(STK, "AAA", "2026-03-05", -1, 100, 100, 0, -10, "C")))])
     ch = {"AAA": {"method": "lots", "lots": [{"date": "2014-01-15", "qty": 1, "cost_eur": 10}]}}
     m = build_personal(st, PSettings(opening_choices=ch)).matches[0]
-    assert m.presumption_rate == 0.4 and m.deduction == pytest.approx(40) and m.result == pytest.approx(60)
+    assert m.presumption_rate == Decimal("0.4") and m.deduction == pytest.approx(40) and m.result == pytest.approx(60)
 
 
 def test_gross_price_and_no_costs_with_olettama():

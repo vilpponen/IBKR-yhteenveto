@@ -10,6 +10,9 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from datetime import date, timedelta
+from decimal import Decimal
+
+from .num import check_date, dec, located
 
 
 def is_ecb(text: str) -> bool:
@@ -17,24 +20,29 @@ def is_ecb(text: str) -> bool:
     return head.startswith("Date,") and ",USD" in head
 
 
-def parse_ecb(text: str) -> dict[str, dict[str, float]]:
+def parse_ecb(text: str, name: str = "eurofxref-hist.csv") -> dict[str, dict[str, Decimal]]:
+    """ECB history file → {date: {ccy: units per EUR}}. 'N/A' and empty cells (currency not quoted that day) are
+    skipped; any other unreadable value or date stops the calculation (InputError)."""
     lines = [l for l in text.lstrip("﻿").splitlines() if l.strip()]
     cols = [c.strip() for c in lines[0].split(",")]
-    out: dict[str, dict[str, float]] = {}
-    for l in lines[1:]:
+    out: dict[str, dict[str, Decimal]] = {}
+    for i, l in enumerate(lines[1:], start=2):
         cells = [c.strip() for c in l.split(",")]
-        row = {}
-        for c, v in zip(cols[1:], cells[1:]):
-            try:
-                row[c] = float(v)
-            except ValueError:
-                continue
-        if cells and row:
-            out[cells[0]] = row
+        with located(file=name, section="EKP-kurssit", line=i):
+            row = {}
+            for c, v in zip(cols[1:], cells[1:]):
+                if not c or v in ("", "N/A"):
+                    continue
+                row[c] = dec(v, f"EKP-kurssi {c}")
+                if row[c] <= 0:
+                    from .num import fail
+                    raise fail(f"EKP-kurssi {c}: kurssin pitää olla positiivinen", v)
+            if cells and row:
+                out[check_date(cells[0])] = row
     return out
 
 
-def trim(rates: dict[str, dict[str, float]], ccys: set[str], first: str, last: str) -> dict[str, dict[str, float]]:
+def trim(rates: dict[str, dict[str, Decimal]], ccys: set[str], first: str, last: str) -> dict[str, dict[str, Decimal]]:
     lo = (date.fromisoformat(first) - timedelta(days=14)).isoformat() if first else ""
     hi = (date.fromisoformat(last) + timedelta(days=14)).isoformat() if last else "9999"
     return {d: {c: r for c, r in row.items() if c in ccys} for d, row in rates.items() if lo <= d <= hi}
@@ -50,7 +58,7 @@ def settle_date(trade: str, ccy: str) -> str:
     return d.isoformat()
 
 
-def rate_on(rates: dict[str, dict[str, float]], days: list[str], ccy: str, day: str) -> float | None:
+def rate_on(rates: dict[str, dict[str, Decimal]], days: list[str], ccy: str, day: str) -> Decimal | None:
     i = bisect_right(days, day)
     while i > 0:
         r = rates[days[i - 1]].get(ccy)
@@ -60,7 +68,7 @@ def rate_on(rates: dict[str, dict[str, float]], days: list[str], ccy: str, day: 
     return None
 
 
-def convert_legs(legs: list[dict], rates: dict[str, dict[str, float]], base: str, warnings: list[str]) -> list[dict]:
+def convert_legs(legs: list[dict], rates: dict[str, dict[str, Decimal]], base: str, warnings: list[str]) -> list[dict]:
     """Copies of the legs with `eur` / `comm_eur` at the ECB rate of the settlement date (base-currency legs as is)."""
     days = sorted(rates)
     out, missing = [], set()

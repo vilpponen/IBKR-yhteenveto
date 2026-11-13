@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from decimal import Decimal
 from typing import Optional
+
+from .num import ZERO
 
 
 @dataclass
@@ -10,8 +13,8 @@ class CashLine:
     date: str
     currency: str
     description: str
-    amount: float            # in `currency`
-    amount_eur: float = 0.0  # converted (group EUR total / group ccy total)
+    amount: Decimal            # in `currency`
+    amount_eur: Decimal = ZERO  # converted (group EUR total / group ccy total)
 
 
 @dataclass
@@ -19,27 +22,27 @@ class RURow:
     """Realized & Unrealized Performance Summary row (EUR)."""
     asset_class: str
     symbol: str
-    st_profit: float = 0.0
-    st_loss: float = 0.0
-    lt_profit: float = 0.0
-    lt_loss: float = 0.0
-    unrl_profit: float = 0.0  # S/T + L/T unrealized profit
-    unrl_loss: float = 0.0    # S/T + L/T unrealized loss (negative)
+    st_profit: Decimal = ZERO
+    st_loss: Decimal = ZERO
+    lt_profit: Decimal = ZERO
+    lt_loss: Decimal = ZERO
+    unrl_profit: Decimal = ZERO  # S/T + L/T unrealized profit
+    unrl_loss: Decimal = ZERO    # S/T + L/T unrealized loss (negative)
 
     @property
-    def profit(self) -> float:
+    def profit(self) -> Decimal:
         return self.st_profit + self.lt_profit
 
     @property
-    def loss(self) -> float:
+    def loss(self) -> Decimal:
         return self.st_loss + self.lt_loss
 
     @property
-    def realized(self) -> float:
+    def realized(self) -> Decimal:
         return self.profit + self.loss
 
     @property
-    def unrealized(self) -> float:
+    def unrealized(self) -> Decimal:
         return self.unrl_profit + self.unrl_loss
 
 
@@ -48,34 +51,34 @@ class Position:
     asset_class: str
     currency: str
     symbol: str
-    quantity: float
-    mult: float
-    cost_price: float
-    cost_basis: float    # in currency
-    close_price: float
-    value: float         # in currency
-    unrealized: float    # in currency
-    cost_basis_eur: float = 0.0
-    value_eur: float = 0.0
-    unrealized_eur: float = 0.0
+    quantity: Decimal
+    mult: Decimal
+    cost_price: Decimal
+    cost_basis: Decimal    # in currency
+    close_price: Decimal
+    value: Decimal         # in currency
+    unrealized: Decimal    # in currency
+    cost_basis_eur: Decimal = ZERO
+    value_eur: Decimal = ZERO
+    unrealized_eur: Decimal = ZERO
 
 
 @dataclass
 class ForexBalance:
     currency: str
-    quantity: float
-    cost_basis_eur: float
-    value_eur: float
-    unrealized_eur: float
+    quantity: Decimal
+    cost_basis_eur: Decimal
+    value_eur: Decimal
+    unrealized_eur: Decimal
 
 
 @dataclass
 class NavRow:
     label: str
-    start_total: float
-    end_long: float
-    end_short: float
-    end_total: float
+    start_total: Decimal
+    end_long: Decimal
+    end_short: Decimal
+    end_total: Decimal
 
 
 @dataclass
@@ -90,26 +93,26 @@ class Statement:
     period_end: str = ""
 
     nav: dict[str, NavRow] = field(default_factory=dict)
-    change_in_nav: dict[str, float] = field(default_factory=dict)  # only in full Activity Statements
+    change_in_nav: dict[str, Decimal] = field(default_factory=dict)  # only in full Activity Statements
     ru: list[RURow] = field(default_factory=list)
     positions: list[Position] = field(default_factory=list)
     forex_balances: list[ForexBalance] = field(default_factory=list)
 
-    commissions_eur: Optional[float] = None        # sum of Comm/Fee over all trades (negative)
-    commissions_by_class: dict[str, float] = field(default_factory=dict)
-    transaction_fees_eur: Optional[float] = None   # e.g. French/Italian FTT (negative)
+    commissions_eur: Optional[Decimal] = None        # sum of Comm/Fee over all trades (negative)
+    commissions_by_class: dict[str, Decimal] = field(default_factory=dict)
+    transaction_fees_eur: Optional[Decimal] = None   # e.g. French/Italian FTT (negative)
     transaction_fee_lines: list[CashLine] = field(default_factory=list)
 
     interest: list[CashLine] = field(default_factory=list)
-    interest_total_eur: Optional[float] = None
+    interest_total_eur: Optional[Decimal] = None
     fees: list[CashLine] = field(default_factory=list)
-    fees_total_eur: Optional[float] = None
+    fees_total_eur: Optional[Decimal] = None
     withholding: list[CashLine] = field(default_factory=list)
-    withholding_total_eur: Optional[float] = None
+    withholding_total_eur: Optional[Decimal] = None
     dividends: list[CashLine] = field(default_factory=list)
-    dividends_total_eur: Optional[float] = None
+    dividends_total_eur: Optional[Decimal] = None
     deposits: list[CashLine] = field(default_factory=list)
-    deposits_total_eur: Optional[float] = None
+    deposits_total_eur: Optional[Decimal] = None
 
     # stock trade legs with exact EUR value (Forex P/L Details for non-base trades, Trades for base-ccy trades)
     # each: {"date","symbol","qty","ccy","eur","exact"} — qty < 0 = sale
@@ -117,7 +120,7 @@ class Statement:
     # realized P/L per closing CFD trade (CSV Trades): {"date","symbol","cls","ccy","pl","eur"} — eur None = unconverted
     cfd_trades: list[dict] = field(default_factory=list)
     # ECB reference rates {date: {ccy: units per EUR}} from a user-supplied eurofxref-hist.csv (trimmed to need)
-    ecb_rates: dict[str, dict[str, float]] = field(default_factory=dict)
+    ecb_rates: dict[str, dict[str, Decimal]] = field(default_factory=dict)
     # listing exchange per symbol (CSV Financial Instrument Information 'Listing Exch')
     listing_exch: dict[str, str] = field(default_factory=dict)
     # crypto trade legs (CSV Trades, Crypto class) — same shape as stock_legs
@@ -138,19 +141,25 @@ class Statement:
     warnings: list[str] = field(default_factory=list)
 
     # ---- helpers -------------------------------------------------------
-    def nav_total(self, label: str, when: str = "end") -> float:
+    def nav_total(self, label: str, when: str = "end") -> Decimal:
         r = self.nav.get(label)
         if not r:
-            return 0.0
+            return ZERO
         return r.start_total if when == "start" else r.end_total
 
     @property
-    def nav_start(self) -> float:
+    def nav_start(self) -> Decimal:
         return self.nav_total("Total", "start")
 
     @property
-    def nav_end(self) -> float:
+    def nav_end(self) -> Decimal:
         return self.nav_total("Total", "end")
+
+    def normalize(self) -> "Statement":
+        """Every float in the statement → exact Decimal (shortest repr). Engines call this first, so a statement
+        built in code or loaded from old JSON can never mix binary floats into the money arithmetic."""
+        from .num import decimalize
+        return decimalize(self)
 
     # ---- JSON round-trip (the web UI keeps the parsed statement in the browser, not on the server)
     def to_dict(self) -> dict:

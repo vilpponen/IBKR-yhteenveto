@@ -221,7 +221,13 @@ selaimessa.
 ## Tarkistukset
 
 Työkirja ja näkymä näyttävät, täsmääkö laskelma IBKR:n omiin lukuihin (Change in NAV): osingot, lähdeverot, korot,
-kulut, provisiot, siirrot, kaupankäynnin tulos ja NAV. Kaikkien erotusten pitää olla 0.
+kulut, provisiot, siirrot, kaupankäynnin tulos ja NAV. Kaikkien erotusten pitää olla 0 (yli 0,01 €:n ero näytetään
+varoituksena).
+
+**Tarkkuus ja syötteen tarkistus:** rahasummat lasketaan desimaalilukuina täydellä tarkkuudella, ja ne pyöristetään
+senteiksi vasta näkymässä (puolikkaat parilliseen). Jos raportissa on lukukelvoton luku, virheellinen päivämäärä tai
+mahdoton arvo, laskenta pysähtyy ja kertoo tiedoston, osion, rivin ja arvon — mitään ei korvata hiljaa nollalla.
+Laskenta ei käytä verkkoa. Perusteet: [päätösrekisteri](docs/PAATOSREKISTERI.md) (LAS-1…LAS-4).
 
 ## Palaute
 
@@ -243,9 +249,8 @@ noussut työkirjan laskemisen jälkeen, laskentaan on tullut muutoksia — laske
 eivät koskaan muuta lukuja.
 
 <!-- muutokset:alku -->
-* **2026-11-13** — 0.10.0 Hankintameno-olettama, kryptovarat ja asetetut optiot
+* **2026-11-13** — 0.11.0 Tarkka laskenta, syötteen tarkistus ja lukitut riippuvuudet · 0.10.0 Hankintameno-olettama, kryptovarat ja asetetut optiot
 * **2026-11-08** — 0.9.0 Versionumero · 0.8.0 Vuoden alun positiot ja toteutetut optiot · 0.7.0 CFD-korjaus ja README-sisällysluettelo
-* **2026-11-07** — 0.6.0 Palautekanavat
 
 Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).
 <!-- muutokset:loppu -->
@@ -253,8 +258,9 @@ Kaikki muutokset: [CHANGELOG.md](CHANGELOG.md).
 ## Kehitys
 
 ```bash
-.venv/bin/pip install pytest
+.venv/bin/python -m pip install --require-hashes -r requirements-dev.txt   # pytest (lukittu)
 .venv/bin/python -m pytest tests            # julkiset testit (keksitty esimerkkiaineisto)
+bash scripts/lock_deps.sh                   # päivittää lukitut riippuvuudet (vaatii uv:n), julkaisun valmistelussa
 python scripts/check_private.py             # estää tilinumerot, PDF/XLSX:t ja oikeat CSV:t repossa
 python scripts/readme_sync.py --write       # päivittää "Viimeisimmät muutokset" CHANGELOG.md:stä
 ln -sf ../../scripts/check_private.py .git/hooks/pre-commit
@@ -265,6 +271,10 @@ commitoi oikeita raportteja** — `.gitignore` ja `check_private.py` estävät s
 `.private-words` (ei versionhallinnassa), niin tarkistus estää myös ne.
 
 Rakenne: `ibkr_yhteenveto/` (parserit, laskenta, Excel), `server.py` (paikallinen palvelin), `static/index.html` (UI).
+
+Riippuvuudet asennetaan vain lukitusta tiedostosta: `requirements.txt` sisältää tarkat versiot ja SHA-256-tiivisteet
+kaikille alustoille ja Python-versioille 3.10–3.14 (`pip install --require-hashes`; run.sh, run.ps1 ja CI). Suorat
+riippuvuudet ovat tiedostossa `requirements.in`. Uutta riippuvuutta ei lisätä ilman lukitusta.
 
 ---
 
